@@ -1,0 +1,16 @@
+{
+    "owners": [
+        "Douman"
+    ],
+    "nickname": "KuuRusty",
+    "username": "KuuRusty",
+    "realname": "KuuRusty",
+    "server": "irc.rizon.net",
+    "port": 6660,
+    "use_ssl": false,
+    "encoding": "UTF-8",
+    "channels": [
+        "#vndis"
+    ],
+    "user_info": "Dummy bot"
+}

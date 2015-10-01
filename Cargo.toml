@@ -1,0 +1,15 @@
+[package]
+name = "vndis-rusty-bot"
+version = "1.0.0"
+authors = ["Douman <douman@gmx.se>"]
+
+[dependencies]
+irc = "*"
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
