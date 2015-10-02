@@ -4,6 +4,7 @@ use irc::client::prelude::*;
 
 ///Handler to direct msgs i.e. addresses to bot
 fn direct_response(nickname: &String, usr_msg: &String) -> String {
+    let usr_msg = usr_msg.to_lowercase();
     let parts: Vec<&str> = usr_msg.split_whitespace().collect();
     match parts[1] {
         "ping" => format!("{}: pong", nickname),
@@ -30,8 +31,10 @@ fn direct_response(nickname: &String, usr_msg: &String) -> String {
 
 ///Handler to all messages in general
 fn indirect_response(nickname: &String, usr_msg: &String) -> Option<String> {
+    let usr_msg = usr_msg.to_lowercase();
     match &usr_msg[..] {
         "!ping" => Some(format!("{}: pong", nickname)),
+        _ if usr_msg.contains("tadaima") || usr_msg.contains("тадайма") || usr_msg.contains("ただいま")=> Some(format!("{}: okaeri", nickname)),
         _ => None,
     }
 }
