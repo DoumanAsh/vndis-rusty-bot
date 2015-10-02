@@ -2,6 +2,8 @@ extern crate irc;
 
 use irc::client::prelude::*;
 
+mod utils;
+
 ///Handler to direct msgs i.e. addresses to bot
 fn direct_response(nickname: &String, usr_msg: &String) -> String {
     let usr_msg = usr_msg.to_lowercase();
@@ -14,7 +16,7 @@ fn direct_response(nickname: &String, usr_msg: &String) -> String {
                 }
 
                 match parts[2] {
-                    "vn" => format!("{}: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", nickname, parts[3..].join("+")),
+                    "vn" => format!("{}: vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", nickname, parts[3..].join("+")),
                     _ => format!("{}: ... bully...", nickname),
                 }
         },
@@ -23,7 +25,7 @@ fn direct_response(nickname: &String, usr_msg: &String) -> String {
                 return format!("{}: ... bully...", nickname);
             }
 
-            format!("{}: http://lmgtfy.com/?q={}", nickname, parts[1..].join("+"))
+            format!("{}: http://lmgtfy.com/?q={}", nickname, parts[2..].join("+"))
         },
         _ => format!("{}: ...", nickname),
     }
