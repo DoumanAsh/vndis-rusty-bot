@@ -6,6 +6,9 @@ authors = ["Douman <douman@gmx.se>"]
 [dependencies]
 irc = "*"
 time = "*"
+hyper = "*"
+url = "*"
+crossbeam = "*"
 
 [profile.release]
 opt-level = 3

@@ -1,8 +1,11 @@
 extern crate irc;
+extern crate hyper;
+extern crate url;
+extern crate crossbeam;
 
 use irc::client::prelude::*;
 use irc::client::conn::NetStream;
-use std::io::{BufWriter, BufReader};
+use std::io::{Read, BufWriter, BufReader};
 mod utils;
 mod log;
 
@@ -56,7 +59,54 @@ impl KuuBot {
         }
     }
 
+    #[inline(always)]
+    ///Sends private message.
+    ///
+    ///Two generec parameters are needed to pass different types of  args.
+    fn send_msg(&self, to: &str, message: &str) {
+        self.server.send_privmsg(to, message).unwrap();
+    }
+
+    ///Upload log dump to pastebin.
+    fn upload(&self, log: &log::IrcLog, nickname: &String) {
+        crossbeam::scope(|scope| {
+            scope.spawn(|| {
+                let log_size = log.len();
+                let paste = log.iter().fold(String::new(), |acc, item| acc + &format!("{}\n", item));
+                let query = vec![("api_option", "paste"),
+                                 ("api_dev_key", "74f762d390252e82c46b55d474c4a069"),
+                                 ("api_paste_private", "0"),
+                                 ("api_paste_expire_date", "1D"),
+                                 ("api_paste_format", "text"),
+                                 ("api_paste_name", "vndis_log"),
+                                 ("api_paste_code", &paste)
+                ];
+
+                let body = url::form_urlencoded::serialize(query.into_iter());
+                let mut headers = hyper::header::Headers::new();
+                headers.set(hyper::header::ContentType::form_url_encoded());
+                let client = hyper::Client::new();
+
+                let mut res = client.post("http://pastebin.com/api/api_post.php")
+                    .headers(headers)
+                    .body(&body)
+                    .send()
+                    .unwrap();
+                drop(body);
+                if res.status != hyper::Ok {
+                    println!(">>>ERROR: unable to upload logs. Status={}", res.status);
+                    return;
+                }
+
+                let mut link = String::new();
+                res.read_to_string(&mut link).unwrap();
+                self.send_msg(VNDIS, &format!("{}: log dump: {} | number of entires={}", nickname, link, log_size));
+            });
+        });
+    }
+
     #[inline]
+    ///Message dispatcher.
     fn handle_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
         match &*message.args[0] {
             VNDIS => self.vndis_msg(message, log),
@@ -67,7 +117,7 @@ impl KuuBot {
     }
 
     #[inline]
-    ///Handler to all VNDIS messages
+    ///Handler to all VNDIS messages.
     fn vndis_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
         let nickname = message.prefix.unwrap_or("".to_string());
         let nickname = nickname[..nickname.find('!').unwrap_or(0)].to_string();
@@ -82,13 +132,9 @@ impl KuuBot {
         }
 
         match response {
-            BotResponse::Channel(text) => {self.server.send_privmsg(VNDIS, &text).unwrap();},
-            BotResponse::Private(text) => {
-                //for private response we allow to send several.
-                for line in text.lines() {
-                    self.server.send_privmsg(&nickname, &line).unwrap();
-                }
-            },
+            BotResponse::Channel(text) => {self.send_msg(VNDIS, &text);},
+            //for private response we allow to send several.
+            BotResponse::Private(text) => { for line in text.lines() { self.send_msg(&nickname, line); } },
             BotResponse::None => (),
         }
 
@@ -102,8 +148,8 @@ impl KuuBot {
         if let Some(nickname) = message.prefix {
             let nickname = nickname[..nickname.find('!').unwrap_or(0)].to_string();
             if !nickname.starts_with("Douman") {
-                self.server.send_privmsg(&nickname, "Please do not bother me").unwrap();
-                self.server.send_privmsg(VNDIS, &format!("Douman: master, some weird {} bullies me :(", nickname)).unwrap();
+                self.send_msg(&nickname, "Please do not bother me");
+                self.send_msg(VNDIS, &format!("Douman: master, some weird {} is trying to abuse me :(", &nickname));
             }
         }
         else {
@@ -111,7 +157,7 @@ impl KuuBot {
         }
     }
 
-    ///Handler to direct msgs i.e. addresses to bot
+    ///Handler to direct msgs i.e. addresses to bot.
     fn direct_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
         let usr_msg = usr_msg.to_lowercase();
         let parts: Vec<&str> = usr_msg.split_whitespace().collect();
@@ -141,7 +187,7 @@ impl KuuBot {
     }
 
     #[inline]
-    ///Handler to all messages in general
+    ///Handler to all messages in general.
     fn indirect_response(&self, nickname: &String, usr_msg: &String) -> BotResponse {
         let usr_msg = usr_msg.to_lowercase();
         match &usr_msg[..] {
@@ -153,7 +199,7 @@ impl KuuBot {
     }
 
     #[inline]
-    ///Parse num for log command. Allowed range [-20:20]
+    ///Parse num for log command. Allowed range [-20:20].
     fn log_parse_num(&self, nickname: &String, num_str: &str) -> Result<isize, BotResponse> {
         let parse_res = num_str.parse::<isize>();
         if parse_res.is_err(){
@@ -170,7 +216,7 @@ impl KuuBot {
         Ok(num)
     }
 
-    ///Handler for command log
+    ///Handler for command log.
     fn command_log(&self, nickname: &String, parts: &Vec<&str>, log: &mut log::IrcLog) -> BotResponse {
         match parts[2] {
             "last" => {
@@ -221,8 +267,9 @@ impl KuuBot {
                 }
 
             },
+            "dump" => { self.upload(log, nickname); BotResponse::None },
             "len" => BotResponse::Private(format!("Log size is {}", log.len())),
-            "help" => BotResponse::Private("log <first/last> [num] | <len>".to_string()),
+            "help" => BotResponse::Private("log <first/last> [num] | <len> | <dump>".to_string()),
             _ => BotResponse::Channel(format!("{}: I don't know such command...", nickname)),
         }
     }
