@@ -33,6 +33,11 @@ impl IrcLog {
     pub fn back(&self) -> Option<&IrcEntry> {
         self.0.back()
     }
+
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 #[derive(Clone, Debug)]
