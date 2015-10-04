@@ -5,6 +5,7 @@ authors = ["Douman <douman@gmx.se>"]
 
 [dependencies]
 irc = "*"
+time = "*"
 
 [profile.release]
 opt-level = 3
