@@ -9,10 +9,12 @@ pub struct IrcLog(VecDeque<IrcEntry>);
 
 impl IrcLog {
     /// Creates log with default capacity 500.
+    #[inline(always)]
     pub fn new() -> IrcLog {
         IrcLog(VecDeque::with_capacity(500))
     }
 
+    #[inline(always)]
     /// Adds entry to log.
     pub fn add(&mut self, entry: IrcEntry) {
         if self.0.len() >= self.0.capacity() {
@@ -21,11 +23,16 @@ impl IrcLog {
         self.0.push_back(entry);
     }
 
+    #[inline(always)]
     /// Returns iterator over underlying buffer.
     pub fn iter(&self) -> std::collections::vec_deque::Iter<IrcEntry> {
         self.0.iter()
     }
 
+    #[inline(always)]
+    pub fn back(&self) -> Option<&IrcEntry> {
+        self.0.back()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -36,6 +43,7 @@ pub struct IrcEntry {
 }
 
 impl IrcEntry {
+    #[inline(always)]
     /// Creates new log entry from message and nick
     pub fn new(nick: String, msg: String) -> IrcEntry {
         IrcEntry {
