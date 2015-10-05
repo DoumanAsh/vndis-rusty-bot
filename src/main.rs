@@ -84,6 +84,8 @@ impl KuuBot {
                 return;
             }
 
+            let log_size = paste.lines().count();
+
             scope.spawn(|| {
                 let query = vec![("api_option", "paste"),
                                  ("api_dev_key", "74f762d390252e82c46b55d474c4a069"),
