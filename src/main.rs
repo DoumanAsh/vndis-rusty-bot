@@ -63,8 +63,6 @@ impl KuuBot {
 
     #[inline(always)]
     ///Sends private message.
-    ///
-    ///Two generec parameters are needed to pass different types of  args.
     fn send_msg(&self, to: &str, message: &str) {
         self.server.send_privmsg(to, message).unwrap();
     }
