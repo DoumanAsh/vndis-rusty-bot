@@ -70,9 +70,10 @@ impl KuuBot {
     ///Upload log dump to pastebin.
     fn upload(&self, log: &log::IrcLog, nickname: &String) {
         crossbeam::scope(|scope| {
+            let log_size = log.len();
+            //pre-allocate some space to reduce re-allocations
+            let paste = log.iter().fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\n", item));
             scope.spawn(|| {
-                let log_size = log.len();
-                let paste = log.iter().fold(String::new(), |acc, item| acc + &format!("{}\n", item));
                 let query = vec![("api_option", "paste"),
                                  ("api_dev_key", "74f762d390252e82c46b55d474c4a069"),
                                  ("api_paste_private", "0"),
@@ -123,16 +124,15 @@ impl KuuBot {
         let nickname = nickname[..nickname.find('!').unwrap_or(0)].to_string();
         let usr_msg = message.suffix.unwrap_or("".to_string());
 
-        let response: BotResponse;
-        if usr_msg.starts_with("KuuRusty") {
-            response = self.direct_response(&nickname, &usr_msg, log)
+        let response = if usr_msg.starts_with("KuuRusty") {
+            self.direct_response(&nickname, &usr_msg, log)
         }
         else {
-            response = self.indirect_response(&nickname, &usr_msg)
-        }
+            self.indirect_response(&nickname, &usr_msg, log)
+        };
 
         match response {
-            BotResponse::Channel(text) => {self.send_msg(VNDIS, &text);},
+            BotResponse::Channel(text) => { self.send_msg(VNDIS, &text); },
             //for private response we allow to send several.
             BotResponse::Private(text) => { for line in text.lines() { self.send_msg(&nickname, line); } },
             BotResponse::None => (),
@@ -158,7 +158,7 @@ impl KuuBot {
     }
 
     ///Handler to direct msgs i.e. addresses to bot.
-    fn direct_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
+    fn direct_response(&self, nickname: &String, usr_msg: &String, log: &log::IrcLog) -> BotResponse {
         let usr_msg = usr_msg.to_lowercase();
         let parts: Vec<&str> = usr_msg.split_whitespace().collect();
         match parts[1] {
@@ -188,11 +188,12 @@ impl KuuBot {
 
     #[inline]
     ///Handler to all messages in general.
-    fn indirect_response(&self, nickname: &String, usr_msg: &String) -> BotResponse {
+    fn indirect_response(&self, nickname: &String, usr_msg: &String, log: &log::IrcLog) -> BotResponse {
         let usr_msg = usr_msg.to_lowercase();
         match &usr_msg[..] {
             "!ping" | "!пинг" => BotResponse::Channel(format!("{}: pong", nickname)),
             "!huiping" | "!хуйпинг" => BotResponse::Channel(format!("{}: 死になさい、ゴミムシ", nickname)),
+            "!log" => self.command_log(nickname, &usr_msg.split_whitespace().collect::<Vec<&str>>(), log),
             _ if usr_msg.contains("tadaima") || usr_msg.contains("тадайма") || usr_msg.contains("ただいま")=> BotResponse::Channel(format!("{}: okaeri", nickname)),
             _ => BotResponse::None,
         }
@@ -203,7 +204,7 @@ impl KuuBot {
     fn log_parse_num(&self, nickname: &String, num_str: &str) -> Result<isize, BotResponse> {
         let parse_res = num_str.parse::<isize>();
         if parse_res.is_err(){
-            return Err(BotResponse::Channel(format!("{}: >{}< is not normal number... bully", nickname, num_str)));
+            return Err(BotResponse::Channel(format!("{}: >{}< is not normal integer... bully", nickname, num_str)));
         }
 
         let num: isize = parse_res.unwrap();
@@ -217,7 +218,7 @@ impl KuuBot {
     }
 
     ///Handler for command log.
-    fn command_log(&self, nickname: &String, parts: &Vec<&str>, log: &mut log::IrcLog) -> BotResponse {
+    fn command_log(&self, nickname: &String, parts: &Vec<&str>, log: &log::IrcLog) -> BotResponse {
         match parts[2] {
             "last" => {
                 let num: isize;
