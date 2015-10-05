@@ -26,7 +26,7 @@ impl fmt::Display for FilterLog {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             FilterLog::None => write!(f, "None"),
-            FilterLog::Last(from) => write!(f, "Last({})", from.strftime("%X.%f").unwrap()),
+            FilterLog::Last(from) => write!(f, "Last({})", from.strftime("%x %X.%f").unwrap()),
         }
     }
 }
