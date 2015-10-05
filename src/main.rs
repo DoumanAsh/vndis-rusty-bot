@@ -2,6 +2,7 @@ extern crate irc;
 extern crate hyper;
 extern crate url;
 extern crate crossbeam;
+extern crate time;
 
 use irc::client::prelude::*;
 use irc::client::conn::NetStream;
@@ -11,6 +12,7 @@ mod log;
 
 const VNDIS: &'static str = "#vndis";
 
+///Represents bot responses
 enum BotResponse {
     None,
     Private(String),
@@ -68,11 +70,14 @@ impl KuuBot {
     }
 
     ///Upload log dump to pastebin.
-    fn upload(&self, log: &log::IrcLog, nickname: &String) {
+    fn upload(&self, log: &mut log::IrcLog, nickname: &String, filter: &log::FilterLog) {
         crossbeam::scope(|scope| {
             let log_size = log.len();
             //pre-allocate some space to reduce re-allocations
-            let paste = log.iter().fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\n", item));
+            let paste = format!("{}{}", log.fs_read(filter), log.iter()
+                                                                .filter(|elem| filter.check(&elem.time()))
+                                                                .fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\n", item))
+                               );
             scope.spawn(|| {
                 let query = vec![("api_option", "paste"),
                                  ("api_dev_key", "74f762d390252e82c46b55d474c4a069"),
@@ -101,7 +106,7 @@ impl KuuBot {
 
                 let mut link = String::new();
                 res.read_to_string(&mut link).unwrap();
-                self.send_msg(VNDIS, &format!("{}: log dump: {} | number of entires={}", nickname, link, log_size));
+                self.send_msg(VNDIS, &format!("{}: log dump: {} | number of entires={} | Filter={}", nickname, link, log_size, filter));
             });
         });
     }
@@ -147,7 +152,7 @@ impl KuuBot {
     fn private_query(&self, message: irc::client::data::message::Message) {
         if let Some(nickname) = message.prefix {
             let nickname = nickname[..nickname.find('!').unwrap_or(0)].to_string();
-            if !nickname.starts_with("Douman") {
+            if !nickname.starts_with("Douman") && !nickname.starts_with("py-ctcp") {
                 self.send_msg(&nickname, "Please do not bother me");
                 self.send_msg(VNDIS, &format!("Douman: master, some weird {} is trying to abuse me :(", &nickname));
             }
@@ -158,7 +163,7 @@ impl KuuBot {
     }
 
     ///Handler to direct msgs i.e. addresses to bot.
-    fn direct_response(&self, nickname: &String, usr_msg: &String, log: &log::IrcLog) -> BotResponse {
+    fn direct_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
         let usr_msg = usr_msg.to_lowercase();
         let parts: Vec<&str> = usr_msg.split_whitespace().collect();
         match parts[1] {
@@ -188,7 +193,7 @@ impl KuuBot {
 
     #[inline]
     ///Handler to all messages in general.
-    fn indirect_response(&self, nickname: &String, usr_msg: &String, log: &log::IrcLog) -> BotResponse {
+    fn indirect_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
         let usr_msg = usr_msg.to_lowercase();
         match &usr_msg[..] {
             "!ping" | "!пинг" => BotResponse::Channel(format!("{}: pong", nickname)),
@@ -218,7 +223,7 @@ impl KuuBot {
     }
 
     ///Handler for command log.
-    fn command_log(&self, nickname: &String, parts: &Vec<&str>, log: &log::IrcLog) -> BotResponse {
+    fn command_log(&self, nickname: &String, parts: &Vec<&str>, log: &mut log::IrcLog) -> BotResponse {
         match parts[2] {
             "last" => {
                 let num: isize;
@@ -268,15 +273,51 @@ impl KuuBot {
                 }
 
             },
-            "dump" => { self.upload(log, nickname); BotResponse::None },
+            "dump" => {
+                let mut filter = log::FilterLog::None;
+                if parts.len() > 4 {
+                    if parts[3] == "last" {
+                        let filter_type = parts[4].to_lowercase().chars().last().unwrap();
+                        let filter_val = parts[4].chars().take(parts[4].len() - 1).collect::<String>().parse::<i64>();
+
+                        if filter_val.is_err() || (filter_type != 'm' && filter_type != 'h' && filter_type != 'd') {
+                            return BotResponse::Channel(format!("{}: >{}< is not normal filter... dummy, it should be num<m/h/d>", nickname, parts[4]));
+                        }
+
+                        let filter_val = filter_val.unwrap();
+                        if filter_val < 0 {
+                            return BotResponse::Channel(format!("{}: filter cannot be negative... dummy.", nickname));
+                        }
+
+                        let dur = match filter_type {
+                            'm' => time::Duration::minutes(filter_val),
+                            'h' => time::Duration::hours(filter_val),
+                            _ => time::Duration::days(filter_val),
+                        };
+
+                        let time_before = time::now() - dur;
+                        //See implementation of Sub<Duration>.
+                        //It seems that result will be in UTC isntead of original timezone.
+                        //For now just manually convert it.
+                        filter = log::FilterLog::Last(time_before.to_local());
+                    }
+                }
+
+                self.upload(log, nickname, &filter);
+                BotResponse::None
+            },
             "len" => BotResponse::Private(format!("Log size is {}", log.len())),
-            "help" => BotResponse::Private("log <first/last> [num] | <len> | <dump>".to_string()),
+            "help" => BotResponse::Private("log <first/last> [num] | <len> | <dump> [last num<m/h/d>]".to_string()),
             _ => BotResponse::Channel(format!("{}: I don't know such command...", nickname)),
         }
     }
 }
 
 fn main() {
+    //Enter directory of bot's executable just in case
+    std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap())
+        .unwrap_or_else(|err| panic!("cannot enter my own directory :(. Err={}", err));
+
     let mut bot = KuuBot::new();
     bot.run();
 }

@@ -3,40 +3,114 @@
 extern crate time;
 use std::collections::vec_deque::VecDeque;
 use std::fmt;
+use std::io::{Write, Read, Seek, BufRead};
 use std;
 
-pub struct IrcLog(VecDeque<IrcEntry>);
+pub enum FilterLog {
+    None,
+    Last(time::Tm)
+}
+
+impl FilterLog {
+    ///Checks if given element is within allowed time range
+    pub fn check(&self, time: &time::Tm) -> bool {
+        match *self {
+            FilterLog::None => true,
+            FilterLog::Last(from) => from > *time,
+        }
+    }
+}
+
+impl fmt::Display for FilterLog {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            FilterLog::None => write!(f, "None"),
+            FilterLog::Last(from) => write!(f, "Last({})", from.strftime("%X.%f").unwrap()),
+        }
+    }
+}
+
+pub struct IrcLog {
+    inner: VecDeque<IrcEntry>,
+    fs_buf: std::fs::File
+}
 
 impl IrcLog {
     /// Creates log with default capacity 500.
     #[inline(always)]
     pub fn new() -> IrcLog {
-        IrcLog(VecDeque::with_capacity(500))
+        IrcLog {
+            inner: VecDeque::with_capacity(500),
+            fs_buf: std::fs::OpenOptions::new().read(true).write(true).create(true).open("vndis.log").unwrap()
+        }
+    }
+
+    ///Dumps all logs except for last 20
+    pub fn dump_to_fs(&mut self) {
+        let len = self.inner.len();
+
+        if len <= 20 {return;}
+
+        //be sure to go at the end of file buffer.
+        self.fs_buf.seek(std::io::SeekFrom::End(0)).unwrap();
+        //range is exclusive at the end
+        for _ in 0..len-19 { self.fs_buf.write_fmt(format_args!("{}\n", self.inner.pop_front().unwrap())).unwrap(); }
+        self.fs_buf.flush().unwrap()
     }
 
     #[inline(always)]
     /// Adds entry to log.
     pub fn add(&mut self, entry: IrcEntry) {
-        if self.0.len() >= self.0.capacity() {
-            self.0.pop_front();
+        if self.inner.len() >= self.inner.capacity() {
+            self.dump_to_fs();
         }
-        self.0.push_back(entry);
+        self.inner.push_back(entry);
+    }
+
+    #[inline(always)]
+    pub fn fs_read(&mut self, filter: &FilterLog) -> String {
+        self.fs_buf.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let reader = std::io::BufReader::new(&mut self.fs_buf);
+        let lines = reader.lines();
+        //Let's try to peek the number of lines for effective allocation
+        let (_, upper) = lines.size_hint();
+
+        let acc_str = if let Some(len) = upper {
+            String::with_capacity(len*50)
+        }
+        else {
+            String::new()
+        };
+
+        lines.fold(acc_str, |acc, line| {
+            const DATA_START: usize = 1;
+            const DATA_END: usize = 28;
+            let line = line.unwrap();
+            let time_stamp = time::strptime(&line[DATA_START..DATA_END], "%x %X.%f").unwrap();
+
+            if filter.check(&time_stamp) {
+                acc + &format!("{}\n", line)
+            }
+            else {
+                acc
+            }
+        })
     }
 
     #[inline(always)]
     /// Returns iterator over underlying buffer.
     pub fn iter(&self) -> std::collections::vec_deque::Iter<IrcEntry> {
-        self.0.iter()
+        self.inner.iter()
     }
 
     #[inline(always)]
     pub fn back(&self) -> Option<&IrcEntry> {
-        self.0.back()
+        self.inner.back()
     }
 
     #[inline(always)]
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.inner.len()
     }
 }
 
@@ -56,6 +130,11 @@ impl IrcEntry {
             nickname: nick,
             message: msg,
         }
+    }
+
+    #[inline(always)]
+    pub fn time(&self) -> time::Tm {
+        self.time
     }
 }
 
