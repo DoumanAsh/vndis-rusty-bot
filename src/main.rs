@@ -78,6 +78,12 @@ impl KuuBot {
                                                                 .filter(|elem| filter.check(&elem.time()))
                                                                 .fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\n", item))
                                );
+
+            if paste.is_empty() {
+                self.send_msg(VNDIS, &format!("{}: I'm sorry there is no logs for your request :(", nickname));
+                return;
+            }
+
             scope.spawn(|| {
                 let query = vec![("api_option", "paste"),
                                  ("api_dev_key", "74f762d390252e82c46b55d474c4a069"),
