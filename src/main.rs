@@ -175,27 +175,12 @@ impl KuuBot {
         let usr_msg = usr_msg.to_lowercase();
         let parts: Vec<&str> = usr_msg.split_whitespace().collect();
         match parts[1] {
-            "ping" | "пинг" => BotResponse::Channel(format!("{}: pong", nickname)),
-            "grep" | "find" => {
-                    if parts.len() < 4 {
-                        return BotResponse::Channel(format!("{}: ... bully...", nickname));
-                    }
-
-                    match parts[2] {
-                        "vn" => BotResponse::Channel(format!("{}: vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", nickname, parts[3..].join("+"))),
-                        _ => BotResponse::Channel(format!("{}: ... bully...", nickname)),
-                    }
-            },
-            "google" => {
-                if parts.len() < 3 {
-                    return BotResponse::Channel(format!("{}: ... bully...", nickname));
-                }
-
-                BotResponse::Channel(format!("{}: http://lmgtfy.com/?q={}", nickname, parts[2..].join("+")))
-            },
-            "log" => self.command_log(nickname, &parts, log),
+            "ping" | "пинг"       => BotResponse::Channel(format!("{}: pong", nickname)),
+            "grep" | "find"       => self.command_grep(nickname, &parts),
+            "google"              => self.command_google(nickname, &parts),
+            "log"                 => self.command_log(nickname, &parts, log),
             "huiping" | "хуйпинг" => BotResponse::Channel(format!("{}: 死になさい、ゴミムシ", nickname)),
-            _ => BotResponse::Channel(format!("{}: ...", nickname)),
+            _                     => BotResponse::Channel(format!("{}: ...", nickname)),
         }
     }
 
@@ -204,11 +189,13 @@ impl KuuBot {
     fn indirect_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
         let usr_msg = usr_msg.to_lowercase();
         match &usr_msg[..] {
-            "!ping" | "!пинг" => BotResponse::Channel(format!("{}: pong", nickname)),
-            "!huiping" | "!хуйпинг" => BotResponse::Channel(format!("{}: 死になさい、ゴミムシ", nickname)),
-            "!log" => self.command_log(nickname, &usr_msg.split_whitespace().collect::<Vec<&str>>(), log),
-            _ if usr_msg.contains("tadaima") || usr_msg.contains("тадайма") || usr_msg.contains("ただいま")=> BotResponse::Channel(format!("{}: okaeri", nickname)),
-            _ => BotResponse::None,
+            "!ping" | "!пинг"                 => BotResponse::Channel(format!("{}: pong", nickname)),
+            "!huiping" | "!хуйпинг"           => BotResponse::Channel(format!("{}: 死になさい、ゴミムシ", nickname)),
+            "!log"                            => self.command_log(nickname, &usr_msg.split_whitespace().collect::<Vec<&str>>(), log),
+            _ if usr_msg.contains("tadaima") ||
+                 usr_msg.contains("тадайма") ||
+                 usr_msg.contains("ただいま") => BotResponse::Channel(format!("{}: okaeri", nickname)),
+            _                                 => BotResponse::None,
         }
     }
 
@@ -228,6 +215,29 @@ impl KuuBot {
             return Err(BotResponse::Channel(format!("{}: >{}< is too much... I do not wanna flood you.", nickname, num)));
         }
         Ok(num)
+    }
+
+    #[inline]
+    ///Handler for command google.
+    fn command_google(&self, nickname: &String, parts: &Vec<&str>) -> BotResponse {
+        if parts.len() < 3 {
+            return BotResponse::Channel(format!("{}: ... bully...", nickname));
+        }
+
+        BotResponse::Channel(format!("{}: http://lmgtfy.com/?q={}", nickname, parts[2..].join("+")))
+    }
+
+    #[inline]
+    ///Handler for command grep/find.
+    fn command_grep(&self, nickname: &String, parts: &Vec<&str>) -> BotResponse {
+        if parts.len() < 4 {
+            return BotResponse::Channel(format!("{}: ... bully...", nickname));
+        }
+
+        match parts[2] {
+            "vn" => BotResponse::Channel(format!("{}: vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", nickname, parts[3..].join("+"))),
+            _ => BotResponse::Channel(format!("{}: ... bully...", nickname)),
+        }
     }
 
     ///Handler for command log.
