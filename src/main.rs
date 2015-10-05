@@ -162,7 +162,7 @@ impl KuuBot {
         }
     }
 
-    ///Handler to direct msgs i.e. addresses to bot.
+    ///Handler to direct msgs i.e. to bot.
     fn direct_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
         let usr_msg = usr_msg.to_lowercase();
         let parts: Vec<&str> = usr_msg.split_whitespace().collect();
@@ -316,7 +316,7 @@ impl KuuBot {
 fn main() {
     //Enter directory of bot's executable just in case
     std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap())
-        .unwrap_or_else(|err| panic!("cannot enter my own directory :(. Err={}", err));
+              .unwrap_or_else(|err| panic!("cannot enter my own directory :(. Err={}", err));
 
     let mut bot = KuuBot::new();
     bot.run();

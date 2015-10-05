@@ -13,6 +13,7 @@ pub enum FilterLog {
 
 impl FilterLog {
     ///Checks if given element is within allowed time range
+    #[inline]
     pub fn check(&self, time: &time::Tm) -> bool {
         match *self {
             FilterLog::None => true,
@@ -41,7 +42,13 @@ impl IrcLog {
     pub fn new() -> IrcLog {
         IrcLog {
             inner: VecDeque::with_capacity(500),
-            fs_buf: std::fs::OpenOptions::new().read(true).write(true).create(true).open("vndis.log").unwrap()
+            //Open file log once for both write/read.
+            //To read/write correctly be sure to .seek() at needed position
+            fs_buf: std::fs::OpenOptions::new().read(true)
+                                               .write(true)
+                                               .create(true)
+                                               .open("vndis.log")
+                                               .unwrap()
         }
     }
 
@@ -51,10 +58,11 @@ impl IrcLog {
 
         if len <= 20 {return;}
 
-        //be sure to go at the end of file buffer.
         self.fs_buf.seek(std::io::SeekFrom::End(0)).unwrap();
         //range is exclusive at the end
-        for _ in 0..len-19 { self.fs_buf.write_fmt(format_args!("{}\n", self.inner.pop_front().unwrap())).unwrap(); }
+        for _ in 0..len-19 {
+            self.fs_buf.write_fmt(format_args!("{}\n", self.inner.pop_front().unwrap())).unwrap();
+        }
         self.fs_buf.flush().unwrap()
     }
 
@@ -67,15 +75,16 @@ impl IrcLog {
         self.inner.push_back(entry);
     }
 
-    #[inline(always)]
+    #[inline]
+    /// Reads all/filtered entries from underlying file buffer.
     pub fn fs_read(&mut self, filter: &FilterLog) -> String {
         self.fs_buf.seek(std::io::SeekFrom::Start(0)).unwrap();
+
         let reader = std::io::BufReader::new(&mut self.fs_buf);
         let lines = reader.lines();
-        //Let's try to peek the number of lines for effective allocation
-        let (_, upper) = lines.size_hint();
 
-        let acc_str = if let Some(len) = upper {
+        //Let's try to peek the number of lines for effective allocation
+        let acc_str = if let (_, Some(len)) = lines.size_hint() {
             String::with_capacity(len*50)
         }
         else {
