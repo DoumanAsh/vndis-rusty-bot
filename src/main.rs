@@ -10,8 +10,14 @@ use std::io::{Read, BufWriter, BufReader};
 mod utils;
 mod log;
 
-const VNDIS: &'static str = "#vndis";
-const MASTER: &'static str= "Douman";
+const VNDIS: &'static str  = "#vndis";
+const MASTER: &'static str = "Douman";
+const USAGE: &'static str  = "Available commands:\n
+ping      - to get pong in response. Available via !\n
+grep <vn> - to get search link on vndb\n
+google    - to get search link on google\n
+log <cmd> - access to log facilities. See log help for more information. Available via !\n
+help      - to get this message";
 
 ///Represents bot responses
 enum BotResponse {
@@ -62,7 +68,8 @@ impl KuuBot {
             "google"              => self.command_google(&parts),
             "log"                 => self.command_log(nickname, &parts[2..], log),
             "about" | "status"    => self.command_about(nickname, &log),
-            "huiping" | "хуйпинг" => BotResponse::Channel("死になさい、ゴミムシ".to_string()),
+            "help"                => self.command_help(),
+            "huiping" | "хуйпинг" => BotResponse::Channel("死になさいゴミムシ".to_string()),
             _                     => BotResponse::Channel("...".to_string()),
         }
     }
@@ -73,7 +80,7 @@ impl KuuBot {
         let usr_msg = usr_msg.to_lowercase();
         match &usr_msg[..] {
             "!ping" | "!пинг"                 => BotResponse::Channel("pong".to_string()),
-            "!huiping" | "!хуйпинг"           => BotResponse::Channel("死になさい、ゴミムシ".to_string()),
+            "!huiping" | "!хуйпинг"           => BotResponse::Channel("死になさいゴミムシ".to_string()),
             _ if usr_msg.starts_with("!log")  => self.command_log(nickname, &usr_msg.split_whitespace().skip(1).collect::<Vec<&str>>(), log),
             _ if usr_msg.contains("tadaima") ||
                  usr_msg.contains("тадайма") ||
@@ -259,6 +266,12 @@ impl KuuBot {
             return Err(BotResponse::Channel(format!(">{}< is too much... I do not wanna flood you.", num)));
         }
         Ok(num)
+    }
+
+    #[inline(always)]
+    ///Handler for command help.
+    fn command_help(&self) -> BotResponse {
+        BotResponse::Private(USAGE.to_string())
     }
 
     #[inline]
