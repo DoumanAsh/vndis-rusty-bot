@@ -25,6 +25,12 @@ struct KuuBot {
     joined: bool,
 }
 
+impl std::fmt::Display for KuuBot {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "KuuBot(nick={}, joined={})", self.nick, self.joined)
+    }
+}
+
 impl KuuBot {
     #[inline(always)]
     ///Creates default bot.
@@ -45,6 +51,106 @@ impl KuuBot {
         self.server.identify().unwrap();
     }
 
+    ///Handler to direct msgs i.e. to bot.
+    fn direct_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
+        let usr_msg = usr_msg.to_lowercase();
+        let parts: Vec<&str> = usr_msg.split_whitespace().collect();
+        match parts[1] {
+            "ping" | "пинг"       => BotResponse::Channel("pong".to_string()),
+            "grep" | "find"       => self.command_grep(&parts),
+            "google"              => self.command_google(&parts),
+            "log"                 => self.command_log(nickname, &parts[2..], log),
+            "about" | "status"    => self.command_about(nickname, &log),
+            "huiping" | "хуйпинг" => BotResponse::Channel("死になさい、ゴミムシ".to_string()),
+            _                     => BotResponse::Channel("...".to_string()),
+        }
+    }
+
+    #[inline]
+    ///Handler to all messages in general.
+    fn indirect_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
+        let usr_msg = usr_msg.to_lowercase();
+        match &usr_msg[..] {
+            "!ping" | "!пинг"                 => BotResponse::Channel("pong".to_string()),
+            "!huiping" | "!хуйпинг"           => BotResponse::Channel("死になさい、ゴミムシ".to_string()),
+            _ if usr_msg.starts_with("!log")  => self.command_log(nickname, &usr_msg.split_whitespace().skip(1).collect::<Vec<&str>>(), log),
+            _ if usr_msg.contains("tadaima") ||
+                 usr_msg.contains("тадайма") ||
+                 usr_msg.contains("ただいま") => BotResponse::Channel("okaeri".to_string()),
+            _                                 => BotResponse::None,
+        }
+    }
+
+    #[inline(always)]
+    ///Sends message.
+    fn send_msg(&self, to: &str, message: &str) {
+        self.server.send_privmsg(to, message).unwrap();
+    }
+
+    #[inline(always)]
+    ///Sends bot's response
+    fn send_response(&self, response: BotResponse, nickname: &String) {
+        match response {
+            BotResponse::Channel(text) => { self.send_msg(VNDIS, &format!("{}: {}", nickname, &text)); },
+            //for private response we allow to send several.
+            BotResponse::Private(text) => { for line in text.lines() { self.send_msg(&nickname, line); } },
+            BotResponse::None => (),
+        }
+    }
+
+    #[inline(always)]
+    ///Returns bot's response
+    fn get_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
+        if usr_msg.starts_with(&self.nick) {
+            self.direct_response(&nickname, &usr_msg, log)
+        }
+        else {
+            self.indirect_response(&nickname, &usr_msg, log)
+        }
+    }
+
+    #[inline]
+    ///Handler to all VNDIS messages.
+    fn vndis_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
+        if let (Some(nickname), Some(usr_msg)) = (utils::get_nick(&message.prefix), message.suffix) {
+            let response = self.get_response(&nickname, &usr_msg, log);
+
+            self.send_response(response, &nickname);
+
+            log.add(log::IrcEntry::new(nickname, usr_msg));
+            println!("{}", log.back().unwrap())
+        }
+        else {
+            println!(">>>ERROR: bad message over vndis")
+        }
+    }
+
+    #[inline]
+    ///Handler to private queries.
+    fn private_query(&self, message: irc::client::data::message::Message, log: &log::IrcLog) {
+        if let Some(nickname) = utils::get_nick(&message.prefix) {
+            if nickname.starts_with("Douman") {
+                let usr_msg = message.suffix.unwrap().to_lowercase();
+                let mut parts = usr_msg.split_whitespace();
+
+                let response = match parts.next() {
+                    Some("status") | Some("about") => self.command_about(&nickname, log),
+                    None                           => BotResponse::Private("Umm...? What? You said nothing. Master, is everything ok?".to_string()),
+                    _                              => BotResponse::Private("Did you mispell command? Try again :)".to_string()),
+                };
+
+                self.send_response(response, &nickname);
+            }
+            else if !nickname.starts_with("py-ctcp") {
+                self.send_msg(&nickname, "Please do not bother me");
+                self.send_msg(VNDIS, &format!("Douman: master, some weird {} is trying to abuse me :(", &nickname));
+            }
+        }
+        else {
+            println!(">>>ERROR: Got private query from who knows whom :(");
+        }
+    }
+
     #[inline]
     ///Message dispatcher.
     fn handle_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
@@ -53,7 +159,7 @@ impl KuuBot {
         match &*message.args[0] {
             VNDIS => self.vndis_msg(message, log),
             //Most possibly private query.
-            _ if message.args[0].starts_with(&self.nick) => self.private_query(message),
+            _ if message.args[0].starts_with(&self.nick) => self.private_query(message, log),
             _ => println!(">>>ERROR: Got unexpected message={:?}", message),
         }
     }
@@ -84,12 +190,6 @@ impl KuuBot {
             println!(">>>Connection is lost. Reconnect after 1s");
             self.reconnect(1000);
         }
-    }
-
-    #[inline(always)]
-    ///Sends private message.
-    fn send_msg(&self, to: &str, message: &str) {
-        self.server.send_privmsg(to, message).unwrap();
     }
 
     ///Upload log dump to pastebin.
@@ -143,112 +243,56 @@ impl KuuBot {
     }
 
     #[inline]
-    ///Handler to all VNDIS messages.
-    fn vndis_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
-        if let (Some(nickname), Some(usr_msg)) = (utils::get_nick(&message.prefix), message.suffix) {
-            let response = if usr_msg.starts_with(&self.nick) {
-                self.direct_response(&nickname, &usr_msg, log)
-            }
-            else {
-                self.indirect_response(&nickname, &usr_msg, log)
-            };
-
-            match response {
-                BotResponse::Channel(text) => { self.send_msg(VNDIS, &text); },
-                //for private response we allow to send several.
-                BotResponse::Private(text) => { for line in text.lines() { self.send_msg(&nickname, line); } },
-                BotResponse::None => (),
-            }
-
-            log.add(log::IrcEntry::new(nickname, usr_msg));
-            println!("{}", log.back().unwrap())
-        }
-        else {
-            println!(">>>ERROR: bad message over vndis")
-        }
-    }
-
-    #[inline]
-    ///Handler to private queries.
-    fn private_query(&self, message: irc::client::data::message::Message) {
-        if let Some(nickname) = utils::get_nick(&message.prefix) {
-            if !nickname.starts_with("Douman") && !nickname.starts_with("py-ctcp") {
-                self.send_msg(&nickname, "Please do not bother me");
-                self.send_msg(VNDIS, &format!("Douman: master, some weird {} is trying to abuse me :(", &nickname));
-            }
-        }
-        else {
-            println!(">>>ERROR: Got private query from who knows whom :(");
-        }
-    }
-
-    ///Handler to direct msgs i.e. to bot.
-    fn direct_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
-        let usr_msg = usr_msg.to_lowercase();
-        let parts: Vec<&str> = usr_msg.split_whitespace().collect();
-        match parts[1] {
-            "ping" | "пинг"       => BotResponse::Channel(format!("{}: pong", nickname)),
-            "grep" | "find"       => self.command_grep(nickname, &parts),
-            "google"              => self.command_google(nickname, &parts),
-            "log"                 => self.command_log(nickname, &parts[2..], log),
-            "huiping" | "хуйпинг" => BotResponse::Channel(format!("{}: 死になさい、ゴミムシ", nickname)),
-            _                     => BotResponse::Channel(format!("{}: ...", nickname)),
-        }
-    }
-
-    #[inline]
-    ///Handler to all messages in general.
-    fn indirect_response(&self, nickname: &String, usr_msg: &String, log: &mut log::IrcLog) -> BotResponse {
-        let usr_msg = usr_msg.to_lowercase();
-        match &usr_msg[..] {
-            "!ping" | "!пинг"                 => BotResponse::Channel(format!("{}: pong", nickname)),
-            "!huiping" | "!хуйпинг"           => BotResponse::Channel(format!("{}: 死になさい、ゴミムシ", nickname)),
-            _ if usr_msg.starts_with("!log")  => self.command_log(nickname, &usr_msg.split_whitespace().skip(1).collect::<Vec<&str>>(), log),
-            _ if usr_msg.contains("tadaima") ||
-                 usr_msg.contains("тадайма") ||
-                 usr_msg.contains("ただいま") => BotResponse::Channel(format!("{}: okaeri", nickname)),
-            _                                 => BotResponse::None,
-        }
-    }
-
-    #[inline]
     ///Parse num for log command. Allowed range [-20:20].
-    fn log_parse_num(&self, nickname: &String, num_str: &str) -> Result<isize, BotResponse> {
+    fn log_parse_num(&self, num_str: &str) -> Result<isize, BotResponse> {
         let parse_res = num_str.parse::<isize>();
         if parse_res.is_err(){
-            return Err(BotResponse::Channel(format!("{}: >{}< is not normal integer... bully", nickname, num_str)));
+            return Err(BotResponse::Channel(format!(">{}< is not normal integer... bully", num_str)));
         }
 
         let num: isize = parse_res.unwrap();
         if num == 0 {
-            return Err(BotResponse::Channel(format!("{}: umm... {}? Are you stupid?", nickname, num)));
+            return Err(BotResponse::Channel(format!("umm... {}? Are you stupid?", num)));
         }
         else if num > 20 || num < -20 {
-            return Err(BotResponse::Channel(format!("{}: >{}< is too much... I do not wanna flood you.", nickname, num)));
+            return Err(BotResponse::Channel(format!(">{}< is too much... I do not wanna flood you.", num)));
         }
         Ok(num)
     }
 
     #[inline]
+    ///Handler for command about.
+    ///
+    ///Response only to master.
+    fn command_about(&self, nickname: &String, log: &log::IrcLog) -> BotResponse {
+        if nickname.starts_with("Douman") {
+            BotResponse::Private(format!("{} Log(len={})", &self, log.len()))
+        }
+        else {
+            BotResponse::Channel("This is only for my master!".to_string())
+        }
+    }
+
+    #[inline]
     ///Handler for command google.
-    fn command_google(&self, nickname: &String, parts: &[&str]) -> BotResponse {
+    fn command_google(&self, parts: &[&str]) -> BotResponse {
         if parts.len() < 3 {
-            return BotResponse::Channel(format!("{}: ... bully...", nickname));
+            return BotResponse::Channel("... bully...".to_string());
         }
 
-        BotResponse::Channel(format!("{}: http://lmgtfy.com/?q={}", nickname, parts[2..].join("+")))
+        BotResponse::Channel(format!("http://lmgtfy.com/?q={}", parts[2..].join("+")))
     }
 
     #[inline]
     ///Handler for command grep/find.
-    fn command_grep(&self, nickname: &String, parts: &[&str]) -> BotResponse {
+    fn command_grep(&self, parts: &[&str]) -> BotResponse {
         if parts.len() < 4 {
-            return BotResponse::Channel(format!("{}: ... bully...", nickname));
+            return BotResponse::Channel("... bully...".to_string());
         }
 
         match parts[2] {
-            "vn" => BotResponse::Channel(format!("{}: vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", nickname, parts[3..].join("+"))),
-            _ => BotResponse::Channel(format!("{}: ... bully...", nickname)),
+            "vn" => BotResponse::Channel(format!("vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", parts[3..].join("+"))),
+            _ => BotResponse::Channel("... bully...".to_string()),
         }
     }
 
@@ -259,7 +303,7 @@ impl KuuBot {
             Some(&"last") => {
                 let num: isize;
                 if let Some(val) = parts.next() {
-                    match self.log_parse_num(nickname, val) {
+                    match self.log_parse_num(val) {
                         Ok(parse_result) => { num = parse_result },
                         Err(parse_err) => return parse_err,
                     }
@@ -283,7 +327,7 @@ impl KuuBot {
             Some(&"first") => {
                 let num: isize;
                 if let Some(val) = parts.next() {
-                    match self.log_parse_num(nickname, val) {
+                    match self.log_parse_num(val) {
                         Ok(parse_result) => { num = parse_result },
                         Err(parse_err) => return parse_err,
                     }
@@ -315,12 +359,12 @@ impl KuuBot {
                             let filter_val = filter_chars.collect::<String>().parse::<i64>();
 
                             if filter_val.is_err() || filter_str.ends_with(TYPES) {
-                                return BotResponse::Channel(format!("{}: >{}< is not normal filter, dummy. It should be num<m/h/d>", nickname, filter_str));
+                                return BotResponse::Channel(format!(">{}< is not normal filter, dummy. It should be num<m/h/d>", filter_str));
                             }
 
                             let filter_val = filter_val.unwrap();
                             if filter_val < 0 {
-                                return BotResponse::Channel(format!("{}: filter cannot be negative... dummy.", nickname));
+                                return BotResponse::Channel("filter cannot be negative... dummy.".to_string());
                             }
 
                             let time_before = time::now() - match filter_type {
@@ -334,11 +378,11 @@ impl KuuBot {
                             filter = log::FilterLog::Last(time_before.to_local());
                         }
                         else {
-                            return BotResponse::Channel(format!("{}: you forgot to tell me filter value :(", nickname));
+                            return BotResponse::Channel("you forgot to tell me filter value :(".to_string());
                         }
                     },
                     _ => {
-                        return BotResponse::Channel(format!("{}: there is such filter >{}<, dummy!", nickname, filter));
+                        return BotResponse::Channel(format!("there is such filter >{}<, dummy!", filter));
                     },
                 }
 
@@ -347,8 +391,8 @@ impl KuuBot {
             },
             Some(&"len") => BotResponse::Private(format!("Log size is {}", log.len())),
             Some(&"help") => BotResponse::Private("log <first/last> [num] | <len> | <dump> [last num<m/h/d>]".to_string()),
-            None => BotResponse::Channel(format!("{}: Um... what do you want? Do you need help?", nickname)),
-            _ => BotResponse::Channel(format!("{}: I don't know such command...", nickname)),
+            None => BotResponse::Channel("Um... what do you want? Do you need help?".to_string()),
+            _ => BotResponse::Channel("I don't know such command...".to_string()),
         }
     }
 }
