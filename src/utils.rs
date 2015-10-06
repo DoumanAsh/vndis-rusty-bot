@@ -1,3 +1,16 @@
+extern crate irc;
+
+#[inline(always)]
+pub fn get_nick(msg_prefix: &Option<String>) -> Option<String> {
+    let mut result = None;
+
+    if let &Some(ref nickname) = msg_prefix {
+        result = Some(nickname[..nickname.find('!').unwrap_or(0)].to_string());
+    }
+
+    result
+}
+
 macro_rules! impl_is_text_checker {
     ($name:ident, $tp:ident, $($arg:pat),+) => {
         pub fn $name<T: AsRef<str>>(text: T) -> bool {

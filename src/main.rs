@@ -21,6 +21,7 @@ enum BotResponse {
 
 struct KuuBot {
     server: IrcServer<BufReader<NetStream>, BufWriter<NetStream>>,
+    nick: String,
     joined: bool,
 }
 
@@ -30,6 +31,7 @@ impl KuuBot {
     fn new() -> KuuBot {
         KuuBot {
             server: IrcServer::new("config.json").unwrap(),
+            nick: "".to_string(),
             joined: false,
         }
     }
@@ -43,6 +45,19 @@ impl KuuBot {
         self.server.identify().unwrap();
     }
 
+    #[inline]
+    ///Message dispatcher.
+    fn handle_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
+        if !self.joined { return; }
+
+        match &*message.args[0] {
+            VNDIS => self.vndis_msg(message, log),
+            //Most possibly private query.
+            _ if message.args[0].starts_with(&self.nick) => self.private_query(message),
+            _ => println!(">>>ERROR: Got unexpected message={:?}", message),
+        }
+    }
+
     ///Starts bot which continuously handles messages.
     fn run(&mut self) {
         let mut log = log::IrcLog::new();
@@ -53,9 +68,12 @@ impl KuuBot {
                     Ok(message) => {
                         match &message.command[..] {
                             "PRIVMSG" => self.handle_msg(message, &mut log),
-                            "JOIN" =>  if !self.joined && message.suffix.unwrap_or("".to_string()) == VNDIS {
-                                self.joined = true;
-                                println!(">>>Joined {}", VNDIS);
+                            "JOIN"    => if !self.joined {
+                                self.joined = message.suffix.unwrap_or("".to_string()) == VNDIS;
+                                if self.joined {
+                                    self.nick = utils::get_nick(&message.prefix).unwrap_or_else(|| panic!("Unable to confirm own nick!?"));
+                                    println!(">>>Joined {}", VNDIS);
+                                }
                             },
                             _ => (),
                         }
@@ -125,48 +143,35 @@ impl KuuBot {
     }
 
     #[inline]
-    ///Message dispatcher.
-    fn handle_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
-        if !self.joined { return; }
-
-        match &*message.args[0] {
-            VNDIS => self.vndis_msg(message, log),
-            //Most possibly private query.
-            _ if message.args[0].starts_with("KuuRusty") => self.private_query(message),
-            _ => println!(">>>ERROR: Got unexpected message={:?}", message),
-        }
-    }
-
-    #[inline]
     ///Handler to all VNDIS messages.
     fn vndis_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
-        let nickname = message.prefix.unwrap_or("".to_string());
-        let nickname = nickname[..nickname.find('!').unwrap_or(0)].to_string();
-        let usr_msg = message.suffix.unwrap_or("".to_string());
+        if let (Some(nickname), Some(usr_msg)) = (utils::get_nick(&message.prefix), message.suffix) {
+            let response = if usr_msg.starts_with(&self.nick) {
+                self.direct_response(&nickname, &usr_msg, log)
+            }
+            else {
+                self.indirect_response(&nickname, &usr_msg, log)
+            };
 
-        let response = if usr_msg.starts_with("KuuRusty") {
-            self.direct_response(&nickname, &usr_msg, log)
+            match response {
+                BotResponse::Channel(text) => { self.send_msg(VNDIS, &text); },
+                //for private response we allow to send several.
+                BotResponse::Private(text) => { for line in text.lines() { self.send_msg(&nickname, line); } },
+                BotResponse::None => (),
+            }
+
+            log.add(log::IrcEntry::new(nickname, usr_msg));
+            println!("{}", log.back().unwrap())
         }
         else {
-            self.indirect_response(&nickname, &usr_msg, log)
-        };
-
-        match response {
-            BotResponse::Channel(text) => { self.send_msg(VNDIS, &text); },
-            //for private response we allow to send several.
-            BotResponse::Private(text) => { for line in text.lines() { self.send_msg(&nickname, line); } },
-            BotResponse::None => (),
+            println!(">>>ERROR: bad message over vndis")
         }
-
-        log.add(log::IrcEntry::new(nickname, usr_msg));
-        println!("{}", log.back().unwrap());
     }
 
     #[inline]
     ///Handler to private queries.
     fn private_query(&self, message: irc::client::data::message::Message) {
-        if let Some(nickname) = message.prefix {
-            let nickname = nickname[..nickname.find('!').unwrap_or(0)].to_string();
+        if let Some(nickname) = utils::get_nick(&message.prefix) {
             if !nickname.starts_with("Douman") && !nickname.starts_with("py-ctcp") {
                 self.send_msg(&nickname, "Please do not bother me");
                 self.send_msg(VNDIS, &format!("Douman: master, some weird {} is trying to abuse me :(", &nickname));
