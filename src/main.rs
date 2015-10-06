@@ -176,7 +176,7 @@ impl KuuBot {
             "ping" | "пинг"       => BotResponse::Channel(format!("{}: pong", nickname)),
             "grep" | "find"       => self.command_grep(nickname, &parts),
             "google"              => self.command_google(nickname, &parts),
-            "log"                 => self.command_log(nickname, &parts, log),
+            "log"                 => self.command_log(nickname, &parts[2..], log),
             "huiping" | "хуйпинг" => BotResponse::Channel(format!("{}: 死になさい、ゴミムシ", nickname)),
             _                     => BotResponse::Channel(format!("{}: ...", nickname)),
         }
@@ -189,7 +189,7 @@ impl KuuBot {
         match &usr_msg[..] {
             "!ping" | "!пинг"                 => BotResponse::Channel(format!("{}: pong", nickname)),
             "!huiping" | "!хуйпинг"           => BotResponse::Channel(format!("{}: 死になさい、ゴミムシ", nickname)),
-            "!log"                            => self.command_log(nickname, &usr_msg.split_whitespace().collect::<Vec<&str>>(), log),
+            _ if usr_msg.starts_with("!log")  => self.command_log(nickname, &usr_msg.split_whitespace().skip(1).collect::<Vec<&str>>(), log),
             _ if usr_msg.contains("tadaima") ||
                  usr_msg.contains("тадайма") ||
                  usr_msg.contains("ただいま") => BotResponse::Channel(format!("{}: okaeri", nickname)),
@@ -217,7 +217,7 @@ impl KuuBot {
 
     #[inline]
     ///Handler for command google.
-    fn command_google(&self, nickname: &String, parts: &Vec<&str>) -> BotResponse {
+    fn command_google(&self, nickname: &String, parts: &[&str]) -> BotResponse {
         if parts.len() < 3 {
             return BotResponse::Channel(format!("{}: ... bully...", nickname));
         }
@@ -227,7 +227,7 @@ impl KuuBot {
 
     #[inline]
     ///Handler for command grep/find.
-    fn command_grep(&self, nickname: &String, parts: &Vec<&str>) -> BotResponse {
+    fn command_grep(&self, nickname: &String, parts: &[&str]) -> BotResponse {
         if parts.len() < 4 {
             return BotResponse::Channel(format!("{}: ... bully...", nickname));
         }
@@ -239,12 +239,13 @@ impl KuuBot {
     }
 
     ///Handler for command log.
-    fn command_log(&self, nickname: &String, parts: &Vec<&str>, log: &mut log::IrcLog) -> BotResponse {
-        match parts[2] {
-            "last" => {
+    fn command_log(&self, nickname: &String, parts: &[&str], log: &mut log::IrcLog) -> BotResponse {
+        let mut parts = parts.iter();
+        match parts.next() {
+            Some(&"last") => {
                 let num: isize;
-                if parts.len() > 3 {
-                    match self.log_parse_num(nickname, parts[3]) {
+                if let Some(val) = parts.next() {
+                    match self.log_parse_num(nickname, val) {
                         Ok(parse_result) => { num = parse_result },
                         Err(parse_err) => return parse_err,
                     }
@@ -265,10 +266,10 @@ impl KuuBot {
                 }
 
             },
-            "first" => {
+            Some(&"first") => {
                 let num: isize;
-                if parts.len() > 3 {
-                    match self.log_parse_num(nickname, parts[3]) {
+                if let Some(val) = parts.next() {
+                    match self.log_parse_num(nickname, val) {
                         Ok(parse_result) => { num = parse_result },
                         Err(parse_err) => return parse_err,
                     }
@@ -289,41 +290,50 @@ impl KuuBot {
                 }
 
             },
-            "dump" => {
+            Some(&"dump") => {
                 let mut filter = log::FilterLog::None;
-                if parts.len() > 4 {
-                    if parts[3] == "last" {
-                        let filter_type = parts[4].to_lowercase().chars().last().unwrap();
-                        let filter_val = parts[4].chars().take(parts[4].len() - 1).collect::<String>().parse::<i64>();
+                match parts.next() {
+                    Some(&"last") => {
+                        if let Some(filter_str) = parts.next() {
+                            const TYPES: &'static[char] = &['m', 'h', 'd'];
+                            let mut filter_chars = filter_str.chars();
+                            let filter_type = filter_chars.next_back().unwrap();
+                            let filter_val = filter_chars.collect::<String>().parse::<i64>();
 
-                        if filter_val.is_err() || (filter_type != 'm' && filter_type != 'h' && filter_type != 'd') {
-                            return BotResponse::Channel(format!("{}: >{}< is not normal filter... dummy, it should be num<m/h/d>", nickname, parts[4]));
+                            if filter_val.is_err() || filter_str.ends_with(TYPES) {
+                                return BotResponse::Channel(format!("{}: >{}< is not normal filter, dummy. It should be num<m/h/d>", nickname, filter_str));
+                            }
+
+                            let filter_val = filter_val.unwrap();
+                            if filter_val < 0 {
+                                return BotResponse::Channel(format!("{}: filter cannot be negative... dummy.", nickname));
+                            }
+
+                            let time_before = time::now() - match filter_type {
+                                'm' => time::Duration::minutes(filter_val),
+                                'h' => time::Duration::hours(filter_val),
+                                _ => time::Duration::days(filter_val),
+                            };
+                            //See implementation of Sub<Duration>.
+                            //It seems that result will be in UTC isntead of original timezone.
+                            //For now just manually convert it.
+                            filter = log::FilterLog::Last(time_before.to_local());
                         }
-
-                        let filter_val = filter_val.unwrap();
-                        if filter_val < 0 {
-                            return BotResponse::Channel(format!("{}: filter cannot be negative... dummy.", nickname));
+                        else {
+                            return BotResponse::Channel(format!("{}: you forgot to tell me filter value :(", nickname));
                         }
-
-                        let dur = match filter_type {
-                            'm' => time::Duration::minutes(filter_val),
-                            'h' => time::Duration::hours(filter_val),
-                            _ => time::Duration::days(filter_val),
-                        };
-
-                        let time_before = time::now() - dur;
-                        //See implementation of Sub<Duration>.
-                        //It seems that result will be in UTC isntead of original timezone.
-                        //For now just manually convert it.
-                        filter = log::FilterLog::Last(time_before.to_local());
-                    }
+                    },
+                    _ => {
+                        return BotResponse::Channel(format!("{}: there is such filter >{}<, dummy!", nickname, filter));
+                    },
                 }
 
                 self.upload(log, nickname, &filter);
                 BotResponse::None
             },
-            "len" => BotResponse::Private(format!("Log size is {}", log.len())),
-            "help" => BotResponse::Private("log <first/last> [num] | <len> | <dump> [last num<m/h/d>]".to_string()),
+            Some(&"len") => BotResponse::Private(format!("Log size is {}", log.len())),
+            Some(&"help") => BotResponse::Private("log <first/last> [num] | <len> | <dump> [last num<m/h/d>]".to_string()),
+            None => BotResponse::Channel(format!("{}: Um... what do you want? Do you need help?", nickname)),
             _ => BotResponse::Channel(format!("{}: I don't know such command...", nickname)),
         }
     }
