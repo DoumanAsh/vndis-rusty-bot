@@ -11,6 +11,7 @@ mod utils;
 mod log;
 
 const VNDIS: &'static str = "#vndis";
+const MASTER: &'static str= "Douman";
 
 ///Represents bot responses
 enum BotResponse {
@@ -129,7 +130,7 @@ impl KuuBot {
     ///Handler to private queries.
     fn private_query(&self, message: irc::client::data::message::Message, log: &log::IrcLog) {
         if let Some(nickname) = utils::get_nick(&message.prefix) {
-            if nickname.starts_with("Douman") {
+            if nickname.starts_with(MASTER) {
                 let usr_msg = message.suffix.unwrap().to_lowercase();
                 let mut parts = usr_msg.split_whitespace();
 
@@ -143,7 +144,7 @@ impl KuuBot {
             }
             else if !nickname.starts_with("py-ctcp") {
                 self.send_msg(&nickname, "Please do not bother me");
-                self.send_msg(VNDIS, &format!("Douman: master, some weird {} is trying to abuse me :(", &nickname));
+                self.send_msg(VNDIS, &format!("{}: master, some weird {} is trying to abuse me :(", MASTER, &nickname));
             }
         }
         else {
@@ -265,7 +266,7 @@ impl KuuBot {
     ///
     ///Response only to master.
     fn command_about(&self, nickname: &String, log: &log::IrcLog) -> BotResponse {
-        if nickname.starts_with("Douman") {
+        if nickname.starts_with(MASTER) {
             BotResponse::Private(format!("{} Log(len={})", &self, log.len()))
         }
         else {
