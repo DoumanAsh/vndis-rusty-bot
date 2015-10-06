@@ -21,6 +21,7 @@ enum BotResponse {
 
 struct KuuBot {
     server: IrcServer<BufReader<NetStream>, BufWriter<NetStream>>,
+    joined: bool,
 }
 
 impl KuuBot {
@@ -29,12 +30,21 @@ impl KuuBot {
     fn new() -> KuuBot {
         KuuBot {
             server: IrcServer::new("config.json").unwrap(),
+            joined: false,
         }
+    }
+
+    ///Reconnects bot with delay.
+    fn reconnect(&mut self, delay_ms: u32) {
+        self.joined = false;
+        std::thread::sleep_ms(delay_ms);
+        println!(">>>Reconnect");
+        self.server.reconnect().unwrap();
+        self.server.identify().unwrap();
     }
 
     ///Starts bot which continuously handles messages.
     fn run(&mut self) {
-        let mut joined = false;
         let mut log = log::IrcLog::new();
         self.server.identify().unwrap();
         loop {
@@ -42,9 +52,9 @@ impl KuuBot {
                 match message {
                     Ok(message) => {
                         match &message.command[..] {
-                            "PRIVMSG" =>  if joined { self.handle_msg(message, &mut log); },
-                            "JOIN" =>  if !joined && message.suffix.unwrap_or("".to_string()) == VNDIS {
-                                joined = true;
+                            "PRIVMSG" => self.handle_msg(message, &mut log),
+                            "JOIN" =>  if !self.joined && message.suffix.unwrap_or("".to_string()) == VNDIS {
+                                self.joined = true;
                                 println!(">>>Joined {}", VNDIS);
                             },
                             _ => (),
@@ -54,10 +64,7 @@ impl KuuBot {
                 }
             }
             println!(">>>Connection is lost. Reconnect after 1s");
-            std::thread::sleep_ms(1000);
-            println!(">>>Reconnect");
-            self.server.reconnect().unwrap();
-            self.server.identify().unwrap();
+            self.reconnect(1000);
         }
     }
 
@@ -120,6 +127,8 @@ impl KuuBot {
     #[inline]
     ///Message dispatcher.
     fn handle_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
+        if !self.joined { return; }
+
         match &*message.args[0] {
             VNDIS => self.vndis_msg(message, log),
             //Most possibly private query.
