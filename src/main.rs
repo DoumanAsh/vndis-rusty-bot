@@ -69,6 +69,7 @@ impl KuuBot {
             "log"                 => self.command_log(nickname, &parts[2..], log),
             "about" | "status"    => self.command_about(nickname, &log),
             "help"                => self.command_help(),
+            "rape"                => self.command_rape(&parts[2..]),
             "huiping" | "хуйпинг" => BotResponse::Channel("死になさいゴミムシ".to_string()),
             _                     => BotResponse::Channel("...".to_string()),
         }
@@ -90,7 +91,7 @@ impl KuuBot {
     }
 
     #[inline(always)]
-    ///Sends message.
+    ///Sends private message.
     fn send_msg(&self, to: &str, message: &str) {
         self.server.send_privmsg(to, message).unwrap();
     }
@@ -172,6 +173,28 @@ impl KuuBot {
         }
     }
 
+    #[inline(always)]
+    ///Welcome joined persons on VNDIS.
+    fn welcome_vndis(&self, nickname: &String) -> BotResponse {
+        match nickname {
+            _ if nickname.starts_with(MASTER) => BotResponse::Channel("Welcome, dear master!".to_string()),
+            _ => BotResponse::None,
+        }
+    }
+
+    #[inline(always)]
+    ///Welcome joined persons.
+    fn welcome(&self, message: irc::client::data::message::Message) {
+        if let (Some(nickname), Some(usr_msg)) = (utils::get_nick(&message.prefix), message.suffix) {
+            let response = match &usr_msg[..] {
+                VNDIS => self.welcome_vndis(&nickname),
+                _     => BotResponse::None,
+            };
+
+            self.send_response(response, &nickname);
+        }
+    }
+
     ///Starts bot which continuously handles messages.
     fn run(&mut self) {
         let mut log = log::IrcLog::new();
@@ -188,6 +211,9 @@ impl KuuBot {
                                     self.nick = utils::get_nick(&message.prefix).unwrap_or_else(|| panic!("Unable to confirm own nick!?"));
                                     println!(">>>Joined {}", VNDIS);
                                 }
+                            }
+                            else {
+                                self.welcome(message);
                             },
                             _ => (),
                         }
@@ -307,6 +333,14 @@ impl KuuBot {
         match parts[2] {
             "vn" => BotResponse::Channel(format!("vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", parts[3..].join("+"))),
             _ => BotResponse::Channel("... bully...".to_string()),
+        }
+    }
+
+    #[inline(always)]
+    fn command_rape(&self, parts: &[&str]) -> BotResponse {
+        match parts.iter().next() {
+            Some(&MASTER) => BotResponse::Channel("umm... no... :(".to_string()),
+            None | _      => BotResponse::Channel("へんたい！".to_string()),
         }
     }
 
