@@ -229,21 +229,16 @@ impl KuuBot {
     ///Upload log dump to pastebin.
     fn upload(&self, log: &mut log::IrcLog, nickname: &String, filter: &log::FilterLog) {
         crossbeam::scope(|scope| {
-            let log_size = log.len();
-            //pre-allocate some space to reduce re-allocations
-            let paste = format!("{}{}", log.fs_read(filter), log.iter()
-                                                                .filter(|elem| filter.check(&elem.time()))
-                                                                .fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\n", item))
-                               );
-
-            if paste.is_empty() {
-                self.send_msg(VNDIS, &format!("{}: I'm sorry there is no logs for your request :(", nickname));
-                return;
-            }
-
-            let log_size = paste.lines().count();
+            let paste = format!("{}{}", log.fs_read(filter), log.log_read_string(filter));
 
             scope.spawn(|| {
+                if paste.is_empty() {
+                    self.send_msg(VNDIS, &format!("{}: I'm sorry there is no logs for your request :(", nickname));
+                    return;
+                }
+
+                let log_size = paste.lines().count();
+
                 let query = vec![("api_option", "paste"),
                                  ("api_dev_key", "74f762d390252e82c46b55d474c4a069"),
                                  ("api_paste_private", "0"),
@@ -306,7 +301,7 @@ impl KuuBot {
     ///Response only to master.
     fn command_about(&self, nickname: &String, log: &log::IrcLog) -> BotResponse {
         if nickname.starts_with(MASTER) {
-            BotResponse::Private(format!("{} Log(len={}, size={}b)", &self, log.len(), log.heap_size()))
+            BotResponse::Private(format!("{} {}", &self, log))
         }
         else {
             BotResponse::Channel("This is only for my master!".to_string())

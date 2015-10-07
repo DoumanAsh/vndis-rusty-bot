@@ -83,6 +83,10 @@ impl IrcLog {
     #[inline]
     /// Reads all/filtered entries from underlying file buffer.
     pub fn fs_read(&mut self, filter: &FilterLog) -> String {
+        if self.fs_buf.metadata().unwrap().len() == 0 {
+            return "".to_string();
+        }
+
         self.fs_buf.seek(std::io::SeekFrom::Start(0)).unwrap();
 
         let reader = std::io::BufReader::new(&mut self.fs_buf);
@@ -118,6 +122,22 @@ impl IrcLog {
     }
 
     #[inline(always)]
+    /// Returns formatted string with log inner entries.
+    pub fn log_read_string(&self, filter: &FilterLog) -> String {
+        let log_size = self.len();
+
+
+        if log_size == 0 {
+            "".to_string()
+        }
+        else {
+            self.iter()
+                .filter(|elem| filter.check(&elem.time()))
+                .fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\n", item))
+        }
+    }
+
+    #[inline(always)]
     pub fn back(&self) -> Option<&IrcEntry> {
         self.inner.back()
     }
@@ -133,6 +153,13 @@ impl IrcLog {
         self.iter().fold(0, |n, elem| n + elem.heap_size()) +
         std::mem::size_of::<VecDeque<IrcEntry>>() +
         std::mem::size_of::<std::fs::File>()
+    }
+}
+
+impl fmt::Display for IrcLog {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let heap_size = self.heap_size();
+        write!(f, "Log(len={}, size={}.{}kb)", self.len(), heap_size/1024, heap_size%1024)
     }
 }
 
