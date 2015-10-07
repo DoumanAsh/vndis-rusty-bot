@@ -158,8 +158,8 @@ impl IrcLog {
 
 impl fmt::Display for IrcLog {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let heap_size = self.heap_size();
-        write!(f, "Log(len={}, size={}.{}kb)", self.len(), heap_size/1024, heap_size%1024)
+        let heap_size = self.heap_size() as f32;
+        write!(f, "Log(len={}, size={:.3}kb)", self.len(), heap_size/1024.0)
     }
 }
 

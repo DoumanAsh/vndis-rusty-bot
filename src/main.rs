@@ -6,7 +6,7 @@ extern crate time;
 
 use irc::client::prelude::*;
 use irc::client::conn::NetStream;
-use std::io::{Read, BufWriter, BufReader};
+use std::io::{Write, Read, BufWriter, BufReader};
 mod utils;
 mod log;
 
@@ -53,7 +53,6 @@ impl KuuBot {
     fn reconnect(&mut self, delay_ms: u32) {
         self.joined = false;
         std::thread::sleep_ms(delay_ms);
-        println!(">>>Reconnect");
         self.server.reconnect().unwrap();
         self.server.identify().unwrap();
     }
@@ -215,14 +214,23 @@ impl KuuBot {
                             else {
                                 self.welcome(message);
                             },
-                            _ => (),
+                            "KICK"   => if message.suffix.unwrap_or("".to_string()) == VNDIS {
+                                println!(">>>KICKED OUT OF {}", &*message.args[0]);
+                                self.joined = false;
+                                match &*message.args[0] {
+                                    VNDIS => self.server.send_join(VNDIS).unwrap(),
+                                    _     => (),
+                                }
+                            },
+                            _        => (),
                         }
                     },
                     Err(err) => println!(">>>ERROR: {}", err),
                 }
             }
-            println!(">>>Connection is lost. Reconnect after 1s");
-            self.reconnect(1000);
+            println!(">>>ERROR: Connection loss");
+            self.reconnect(10);
+            std::io::stdout().flush().unwrap();
         }
     }
 
