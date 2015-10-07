@@ -1,4 +1,7 @@
 extern crate irc;
+extern crate libc;
+
+use self::libc::{c_void};
 
 #[inline(always)]
 pub fn get_nick(msg_prefix: &Option<String>) -> Option<String> {
@@ -9,6 +12,19 @@ pub fn get_nick(msg_prefix: &Option<String>) -> Option<String> {
     }
 
     result
+}
+
+extern {
+    fn je_malloc_usable_size(ptr: *const c_void) -> u64;
+}
+
+///Calculates the size of memory which is allocated for pointer.
+pub fn heap_size_of(ptr: *const c_void) -> usize {
+    if ptr == 0x01 as *const c_void {
+        0
+    } else {
+        unsafe { je_malloc_usable_size(ptr) as usize }
+    }
 }
 
 macro_rules! impl_is_text_checker {

@@ -1,10 +1,15 @@
 //! Logging module
 
 extern crate time;
+extern crate libc;
+use self::libc::{c_void};
+
 use std::collections::vec_deque::VecDeque;
 use std::fmt;
 use std::io::{Write, Read, Seek, BufRead};
 use std;
+
+use utils;
 
 pub enum FilterLog {
     None,
@@ -121,6 +126,14 @@ impl IrcLog {
     pub fn len(&self) -> usize {
         self.inner.len()
     }
+
+    ///Returns size of log in bytes.
+    #[inline(always)]
+    pub fn heap_size(&self) -> usize {
+        self.iter().fold(0, |n, elem| n + elem.heap_size()) +
+        std::mem::size_of::<VecDeque<IrcEntry>>() +
+        std::mem::size_of::<std::fs::File>()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -144,6 +157,14 @@ impl IrcEntry {
     #[inline(always)]
     pub fn time(&self) -> time::Tm {
         self.time
+    }
+
+    #[inline(always)]
+    pub fn heap_size(&self) -> usize {
+        //there are 11 fields of i32 in Tm.
+        std::mem::size_of::<i32>() * 11 +
+        utils::heap_size_of(self.nickname.as_ptr() as *const c_void) +
+        utils::heap_size_of(self.message.as_ptr() as *const c_void)
     }
 }
 

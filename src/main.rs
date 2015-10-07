@@ -306,7 +306,7 @@ impl KuuBot {
     ///Response only to master.
     fn command_about(&self, nickname: &String, log: &log::IrcLog) -> BotResponse {
         if nickname.starts_with(MASTER) {
-            BotResponse::Private(format!("{} Log(len={})", &self, log.len()))
+            BotResponse::Private(format!("{} Log(len={}, size={}b)", &self, log.len(), log.heap_size()))
         }
         else {
             BotResponse::Channel("This is only for my master!".to_string())
