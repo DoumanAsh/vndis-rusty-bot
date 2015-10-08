@@ -1,3 +1,4 @@
+#![cfg_attr(test, allow(dead_code))]
 extern crate irc;
 extern crate hyper;
 extern crate url;
@@ -21,6 +22,7 @@ log <cmd> - access to log facilities. See log help for more information. Availab
 help      - to get this message";
 
 ///Represents bot responses
+#[derive(Debug)]
 enum BotResponse {
     None,
     Private(String),
@@ -238,7 +240,7 @@ impl KuuBot {
     ///Upload log dump to pastebin.
     fn upload(&self, log: &mut log::IrcLog, nickname: &String, filter: &log::FilterLog) {
         crossbeam::scope(|scope| {
-            let paste = format!("{}{}", log.fs_read(filter), log.log_read_string(filter));
+            let paste = log.get_all(filter);
 
             scope.spawn(|| {
                 if paste.is_empty() {
@@ -453,4 +455,146 @@ fn main() {
 
     let mut bot = KuuBot::new();
     bot.run();
+}
+
+#[cfg(test)]
+mod tests {
+    const CONFIG: &'static str = include_str!("../config.json");
+    use std;
+    use std::io::Write;
+
+    fn pre_condition() {
+        std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap())
+                  .unwrap_or_else(|err| panic!("cannot enter my own directory :(. Err={}", err));
+
+        let mut file = std::fs::File::create("config.json").unwrap();
+        file.write_all(CONFIG.as_bytes()).unwrap_or(())
+    }
+
+    fn post_condition() {
+        std::fs::remove_file("vndis.log").unwrap_or(());
+        std::fs::remove_file("config.json").unwrap_or(())
+    }
+
+    #[test]
+    fn test_cmd_about() {
+        pre_condition();
+
+        let bot = super::KuuBot::new();
+        let log = super::log::IrcLog::new();
+
+        let response = bot.command_about(&"DoumanAsh".to_string(), &log);
+        assert!(match response {
+            super::BotResponse::Private(text) => text == format!("{} {}", &bot, &log),
+            _ => false
+        });
+
+        let response = bot.command_about(&"!DoumanAsh".to_string(), &log);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "This is only for my master!",
+            _ => false
+        });
+
+        post_condition();
+    }
+
+    #[test]
+    fn test_cmd_google() {
+        pre_condition();
+
+        let bot = super::KuuBot::new();
+
+        let parts = vec!["Kuu:", "google"];
+        let response = bot.command_google(&parts);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "... bully...",
+            _ => false
+        });
+
+        let parts = vec!["Kuu:", "google", "vn", "sengoku", "hime"];
+        let response = bot.command_google(&parts);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == format!("http://lmgtfy.com/?q={}", parts[2..].join("+")),
+            _ => false
+        });
+
+        post_condition();
+    }
+
+    #[test]
+    fn test_cmd_grep() {
+        pre_condition();
+        let bot = super::KuuBot::new();
+
+        let parts = vec!["Kuu:", "grep"];
+        let response = bot.command_grep(&parts);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "... bully...",
+            _ => false
+        });
+
+        let parts = vec!["Kuu:", "grep", "vn", "Sengoku", "Hime"];
+        let response = bot.command_grep(&parts);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == format!("vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", parts[3..].join("+")),
+            _ => false
+        });
+
+        post_condition();
+    }
+
+    #[test]
+    fn test_log_parse_num() {
+        pre_condition();
+
+        let bot = super::KuuBot::new();
+
+        let test_str = "x-25";
+        let response = bot.log_parse_num(test_str);
+        assert!(response.is_err());
+        let response = response.err().unwrap();
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == format!(">{}< is not normal integer... bully", test_str),
+            _ => false
+        });
+
+        let test_str = "0";
+        let response = bot.log_parse_num(test_str);
+        assert!(response.is_err());
+        let response = response.err().unwrap();
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "umm... 0? Are you stupid?",
+            _ => false
+        });
+
+        let test_str = "21";
+        let response = bot.log_parse_num(test_str);
+        assert!(response.is_err());
+        let response = response.err().unwrap();
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == format!(">{}< is too much... I do not wanna flood you.", 21),
+            _ => false
+        });
+
+        let test_str = "-21";
+        let response = bot.log_parse_num(test_str);
+        assert!(response.is_err());
+        let response = response.err().unwrap();
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == format!(">{}< is too much... I do not wanna flood you.", -21),
+            _ => false
+        });
+
+        let test_str = "20";
+        let response = bot.log_parse_num(test_str);
+        assert!(response.is_ok());
+        assert!(response.unwrap() == 20);
+
+        let test_str = "-20";
+        let response = bot.log_parse_num(test_str);
+        assert!(response.is_ok());
+        assert!(response.unwrap() == -20);
+
+        post_condition();
+    }
 }

@@ -74,7 +74,7 @@ impl IrcLog {
     #[inline(always)]
     /// Adds entry to log.
     pub fn add(&mut self, entry: IrcEntry) {
-        if self.inner.len() >= self.inner.capacity() {
+        if self.len() >= self.capacity() {
             self.dump_to_fs();
         }
         self.inner.push_back(entry);
@@ -123,9 +123,8 @@ impl IrcLog {
 
     #[inline(always)]
     /// Returns formatted string with log inner entries.
-    pub fn log_read_string(&self, filter: &FilterLog) -> String {
+    pub fn read_to_string(&self, filter: &FilterLog) -> String {
         let log_size = self.len();
-
 
         if log_size == 0 {
             "".to_string()
@@ -138,6 +137,12 @@ impl IrcLog {
     }
 
     #[inline(always)]
+    ///Returns content of file and heap buffers.
+    pub fn get_all(&mut self, filter: &FilterLog) -> String {
+        format!("{}{}", self.fs_read(filter), self.read_to_string(filter))
+    }
+
+    #[inline(always)]
     pub fn back(&self) -> Option<&IrcEntry> {
         self.inner.back()
     }
@@ -145,6 +150,11 @@ impl IrcLog {
     #[inline(always)]
     pub fn len(&self) -> usize {
         self.inner.len()
+    }
+
+    #[inline(always)]
+    pub fn capacity(&self) -> usize {
+        self.inner.capacity()
     }
 
     ///Returns size of log in bytes.
@@ -187,6 +197,17 @@ impl IrcEntry {
     }
 
     #[inline(always)]
+    pub fn nickname(&self) -> &String {
+        &self.nickname
+    }
+
+    #[inline(always)]
+    pub fn message(&self) -> &String {
+        &self.message
+    }
+
+
+    #[inline(always)]
     pub fn heap_size(&self) -> usize {
         //there are 11 fields of i32 in Tm.
         std::mem::size_of::<i32>() * 11 +
@@ -208,5 +229,81 @@ impl PartialEq for IrcEntry {
 impl fmt::Display for IrcEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "[{}] <{}> {}", self.time.strftime("%x %X.%f").unwrap(), self.nickname, self.message)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate time;
+    use super::*;
+    use std;
+
+    #[test]
+    fn test_irc_entry() {
+        let entry = IrcEntry::new("Kuu".to_string(), "nya nya!".to_string());
+
+        assert!(entry.nickname == "Kuu");
+        assert!(entry.message == "nya nya!");
+    }
+
+    #[test]
+    fn test_filter_log() {
+        let time_now    = time::now();
+        let time_before = time_now - time::Duration::minutes(10);
+        let time_after  = time_now + time::Duration::minutes(10);
+        let no_filter   = FilterLog::None;
+        let filter_now  = FilterLog::Last(time_now);
+
+        assert!(no_filter.check(&time_before));
+        assert!(format!("{}", no_filter) == "None");
+
+        assert!(!filter_now.check(&time_before));
+        assert!(filter_now.check(&time_after));
+        assert!(format!("{}", filter_now) == format!("Last({})", time_now.strftime("%x %X.%f").unwrap()));
+    }
+
+    macro_rules! is_file {
+        ($path:expr) => { std::fs::metadata($path).ok().map_or(false, |data| data.is_file()); };
+    }
+
+    #[test]
+    fn test_irc_log() {
+        let filter = FilterLog::None;
+        std::env::set_current_dir(std::env::current_exe().unwrap().parent().unwrap())
+                  .unwrap_or_else(|err| panic!("cannot enter my own directory :(. Err={}", err));
+
+        let mut log = IrcLog::new();
+        let old_capacity = log.capacity();
+
+        assert!(is_file!("vndis.log"));
+        assert!(log.len() == 0);
+        assert!(log.read_to_string(&filter).is_empty());
+        assert!(log.fs_read(&filter).is_empty());
+
+        let flood_entry = IrcEntry::new("Kuu".to_string(), "nya nya!".to_string());
+        let rare_entry = IrcEntry::new("Kuu".to_string(), "...".to_string());
+
+        log.add(flood_entry.clone());
+        log.add(rare_entry.clone());
+
+        let mut expect_str = format!("{}\\n{}\\n", flood_entry, rare_entry);
+        assert!(log.len() == 2);
+        assert!(log.back() == Some(&rare_entry));
+        assert!(log.read_to_string(&filter) == expect_str);
+        assert!(log.fs_read(&filter).is_empty());
+
+        for i in 0..520 {
+            let entry = IrcEntry::new(format!("Kuu{}", i), format!("i={}", i));
+            expect_str = expect_str + &format!("{}\\n", &entry);
+            log.add(entry);
+        }
+
+        assert!(log.capacity() == old_capacity);
+        assert!(log.back().unwrap().nickname == "Kuu519");
+        assert!(log.back().unwrap().message == "i=519");
+        assert!(log.get_all(&filter) == expect_str);
+
+        drop(log);
+        std::fs::remove_file("vndis.log").unwrap();
     }
 }

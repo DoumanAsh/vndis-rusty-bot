@@ -45,3 +45,16 @@ macro_rules! impl_is_text_checker {
 //                                  '\u{3400}'...'\u{4dbf}');
 //
 
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_get_nick() {
+        let result = super::get_nick(&Some("KuuRusty!KuuRusty@irc.net".to_string()));
+
+        assert!(result.is_some());
+        assert!(result.unwrap() == "KuuRusty");
+
+        let result = super::get_nick(&None);
+        assert!(!result.is_some());
+    }
+}
