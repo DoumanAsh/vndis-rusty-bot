@@ -66,8 +66,8 @@ impl KuuBot {
         let parts: Vec<&str> = usr_msg.split_whitespace().collect();
         match parts[1] {
             "ping" | "пинг"       => BotResponse::Channel("pong".to_string()),
-            "grep" | "find"       => self.command_grep(&parts),
-            "google"              => self.command_google(&parts),
+            "grep" | "find"       => KuuBot::command_grep(&parts),
+            "google"              => KuuBot::command_google(&parts),
             "log"                 => self.command_log(nickname, &parts[2..], log),
             "about" | "status"    => self.command_about(nickname, &log),
             "help"                => self.command_help(),
@@ -250,7 +250,8 @@ impl KuuBot {
 
                 let log_size = paste.matches("\\n").count();
                 let mut headers = hyper::header::Headers::new();
-                headers.set(hyper::header::Authorization(hyper::header::Basic{username: "DoumanAsh".to_owned(), password: Some(GITHUB_AUTH.trim().to_owned())}));
+                headers.set(hyper::header::Authorization(hyper::header::Basic{username: "DoumanAsh".to_owned(),
+                                                                              password: Some(GITHUB_AUTH.trim().to_owned()) }));
                 headers.set(hyper::header::UserAgent("vndis_rusty_bot/1.0".to_owned()));
                 let client = hyper::Client::new();
 
@@ -280,7 +281,7 @@ impl KuuBot {
 
     #[inline]
     ///Parse num for log command. Allowed range [-20:20].
-    fn log_parse_num(&self, num_str: &str) -> Result<isize, BotResponse> {
+    fn log_parse_num(num_str: &str) -> Result<isize, BotResponse> {
         let parse_res = num_str.parse::<isize>();
         if parse_res.is_err(){
             return Err(BotResponse::Channel(format!(">{}< is not normal integer... bully", num_str)));
@@ -317,7 +318,7 @@ impl KuuBot {
 
     #[inline]
     ///Handler for command google.
-    fn command_google(&self, parts: &[&str]) -> BotResponse {
+    fn command_google(parts: &[&str]) -> BotResponse {
         if parts.len() < 3 {
             return BotResponse::Channel("... bully...".to_string());
         }
@@ -327,7 +328,7 @@ impl KuuBot {
 
     #[inline]
     ///Handler for command grep/find.
-    fn command_grep(&self, parts: &[&str]) -> BotResponse {
+    fn command_grep(parts: &[&str]) -> BotResponse {
         if parts.len() < 4 {
             return BotResponse::Channel("... bully...".to_string());
         }
@@ -346,6 +347,32 @@ impl KuuBot {
         }
     }
 
+    fn parse_filter_time(filter_str: &str) -> Result<time::Tm, BotResponse> {
+        const TYPES: &'static[char] = &['m', 'h', 'd'];
+        let mut filter_chars = filter_str.chars();
+        let filter_type = filter_chars.next_back().unwrap();
+        let filter_val = filter_chars.collect::<String>().parse::<i64>();
+
+        if filter_val.is_err() || !TYPES.contains(&filter_type) {
+            return Err(BotResponse::Channel(format!(">{}< is not normal filter, dummy. It should be num<m/h/d>", filter_str)));
+        }
+
+        let filter_val = filter_val.unwrap();
+        if filter_val < 0 {
+            return Err(BotResponse::Channel("filter cannot be negative... dummy.".to_string()));
+        }
+
+        let time_before = time::now() - match filter_type {
+            'm' => time::Duration::minutes(filter_val),
+            'h' => time::Duration::hours(filter_val),
+            _ => time::Duration::days(filter_val),
+        };
+        //See implementation of Sub<Duration>.
+        //It seems that result will be in UTC isntead of original timezone.
+        //For now just manually convert it.
+        Ok(time_before.to_local())
+    }
+
     ///Handler for command log.
     fn command_log(&self, nickname: &String, parts: &[&str], log: &mut log::IrcLog) -> BotResponse {
         let mut parts = parts.iter();
@@ -353,7 +380,7 @@ impl KuuBot {
             Some(&"last") => {
                 let num: isize;
                 if let Some(val) = parts.next() {
-                    match self.log_parse_num(val) {
+                    match KuuBot::log_parse_num(val) {
                         Ok(parse_result) => { num = parse_result },
                         Err(parse_err) => return parse_err,
                     }
@@ -377,7 +404,7 @@ impl KuuBot {
             Some(&"first") => {
                 let num: isize;
                 if let Some(val) = parts.next() {
-                    match self.log_parse_num(val) {
+                    match KuuBot::log_parse_num(val) {
                         Ok(parse_result) => { num = parse_result },
                         Err(parse_err) => return parse_err,
                     }
@@ -403,29 +430,10 @@ impl KuuBot {
                 match parts.next() {
                     Some(&"last") => {
                         if let Some(filter_str) = parts.next() {
-                            const TYPES: &'static[char] = &['m', 'h', 'd'];
-                            let mut filter_chars = filter_str.chars();
-                            let filter_type = filter_chars.next_back().unwrap();
-                            let filter_val = filter_chars.collect::<String>().parse::<i64>();
-
-                            if filter_val.is_err() || !TYPES.contains(&filter_type) {
-                                return BotResponse::Channel(format!(">{}< is not normal filter, dummy. It should be num<m/h/d>", filter_str));
+                            match KuuBot::parse_filter_time(filter_str) {
+                                Ok(time)      => filter = log::FilterLog::Last(time),
+                                Err(response) => return response,
                             }
-
-                            let filter_val = filter_val.unwrap();
-                            if filter_val < 0 {
-                                return BotResponse::Channel("filter cannot be negative... dummy.".to_string());
-                            }
-
-                            let time_before = time::now() - match filter_type {
-                                'm' => time::Duration::minutes(filter_val),
-                                'h' => time::Duration::hours(filter_val),
-                                _ => time::Duration::days(filter_val),
-                            };
-                            //See implementation of Sub<Duration>.
-                            //It seems that result will be in UTC isntead of original timezone.
-                            //For now just manually convert it.
-                            filter = log::FilterLog::Last(time_before.to_local());
                         }
                         else {
                             return BotResponse::Channel("you forgot to tell me filter value :(".to_string());
@@ -500,57 +508,42 @@ mod tests {
 
     #[test]
     fn test_cmd_google() {
-        pre_condition();
-
-        let bot = super::KuuBot::new();
-
         let parts = vec!["Kuu:", "google"];
-        let response = bot.command_google(&parts);
+        let response = super::KuuBot::command_google(&parts);
         assert!(match response {
             super::BotResponse::Channel(text) => text == "... bully...",
             _ => false
         });
 
         let parts = vec!["Kuu:", "google", "vn", "sengoku", "hime"];
-        let response = bot.command_google(&parts);
+        let response = super::KuuBot::command_google(&parts);
         assert!(match response {
             super::BotResponse::Channel(text) => text == format!("http://lmgtfy.com/?q={}", parts[2..].join("+")),
             _ => false
         });
-
-        post_condition();
     }
 
     #[test]
     fn test_cmd_grep() {
-        pre_condition();
-        let bot = super::KuuBot::new();
-
         let parts = vec!["Kuu:", "grep"];
-        let response = bot.command_grep(&parts);
+        let response = super::KuuBot::command_grep(&parts);
         assert!(match response {
             super::BotResponse::Channel(text) => text == "... bully...",
             _ => false
         });
 
         let parts = vec!["Kuu:", "grep", "vn", "Sengoku", "Hime"];
-        let response = bot.command_grep(&parts);
+        let response = super::KuuBot::command_grep(&parts);
         assert!(match response {
             super::BotResponse::Channel(text) => text == format!("vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", parts[3..].join("+")),
             _ => false
         });
-
-        post_condition();
     }
 
     #[test]
     fn test_log_parse_num() {
-        pre_condition();
-
-        let bot = super::KuuBot::new();
-
         let test_str = "x-25";
-        let response = bot.log_parse_num(test_str);
+        let response = super::KuuBot::log_parse_num(test_str);
         assert!(response.is_err());
         let response = response.err().unwrap();
         assert!(match response {
@@ -559,7 +552,7 @@ mod tests {
         });
 
         let test_str = "0";
-        let response = bot.log_parse_num(test_str);
+        let response = super::KuuBot::log_parse_num(test_str);
         assert!(response.is_err());
         let response = response.err().unwrap();
         assert!(match response {
@@ -568,7 +561,7 @@ mod tests {
         });
 
         let test_str = "21";
-        let response = bot.log_parse_num(test_str);
+        let response = super::KuuBot::log_parse_num(test_str);
         assert!(response.is_err());
         let response = response.err().unwrap();
         assert!(match response {
@@ -577,7 +570,7 @@ mod tests {
         });
 
         let test_str = "-21";
-        let response = bot.log_parse_num(test_str);
+        let response = super::KuuBot::log_parse_num(test_str);
         assert!(response.is_err());
         let response = response.err().unwrap();
         assert!(match response {
@@ -586,15 +579,27 @@ mod tests {
         });
 
         let test_str = "20";
-        let response = bot.log_parse_num(test_str);
+        let response = super::KuuBot::log_parse_num(test_str);
         assert!(response.is_ok());
         assert!(response.unwrap() == 20);
 
         let test_str = "-20";
-        let response = bot.log_parse_num(test_str);
+        let response = super::KuuBot::log_parse_num(test_str);
         assert!(response.is_ok());
         assert!(response.unwrap() == -20);
+    }
 
-        post_condition();
+    fn test_parse_filter_time() {
+
+        assert!(super::KuuBot::parse_filter_time("20m").is_ok());
+        assert!(super::KuuBot::parse_filter_time("20666m").is_ok());
+        assert!(super::KuuBot::parse_filter_time("20d").is_ok());
+        assert!(super::KuuBot::parse_filter_time("20h").is_ok());
+
+        assert!(super::KuuBot::parse_filter_time("-20h").is_err());
+        assert!(super::KuuBot::parse_filter_time("0h").is_err());
+        assert!(super::KuuBot::parse_filter_time("0Gsdasdsa").is_err());
+        assert!(super::KuuBot::parse_filter_time("G1").is_err());
+        assert!(super::KuuBot::parse_filter_time("5").is_err());
     }
 }
