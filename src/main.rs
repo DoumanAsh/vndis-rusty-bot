@@ -10,6 +10,7 @@ use std::io::{Write, Read, BufWriter, BufReader};
 mod utils;
 mod log;
 
+const GITHUB_AUTH: &'static str = include_str!("github_token.txt");
 const VNDIS: &'static str  = "#vndis";
 const MASTER: &'static str = "Douman";
 const USAGE: &'static str  = "Available commands:\n
@@ -241,40 +242,36 @@ impl KuuBot {
 
             scope.spawn(|| {
                 if paste.is_empty() {
-                    self.send_msg(VNDIS, &format!("{}: I'm sorry there is no logs for your request :(", nickname));
+                    self.send_msg(VNDIS, &format!("{}: I'm sorry there are no logs for your request :(", nickname));
                     return;
                 }
 
                 let log_size = paste.lines().count();
-
-                let query = vec![("api_option", "paste"),
-                                 ("api_dev_key", "74f762d390252e82c46b55d474c4a069"),
-                                 ("api_paste_private", "0"),
-                                 ("api_paste_expire_date", "1D"),
-                                 ("api_paste_format", "text"),
-                                 ("api_paste_name", "vndis_log"),
-                                 ("api_paste_code", &paste)
-                ];
-
-                let body = url::form_urlencoded::serialize(query.into_iter());
                 let mut headers = hyper::header::Headers::new();
-                headers.set(hyper::header::ContentType::form_url_encoded());
+                headers.set(hyper::header::Authorization(hyper::header::Basic{username: "DoumanAsh".to_owned(), password: Some(GITHUB_AUTH.trim().to_owned())}));
+                headers.set(hyper::header::UserAgent("vndis_rusty_bot/1.0".to_owned()));
                 let client = hyper::Client::new();
 
-                let mut res = client.post("http://pastebin.com/api/api_post.php")
-                    .headers(headers)
-                    .body(&body)
-                    .send()
-                    .unwrap();
-                drop(body);
-                if res.status != hyper::Ok {
-                    println!(">>>ERROR: unable to upload logs. Status={}", res.status);
-                    return;
-                }
+                let body = format!("{{\"description\": \"#vndis logs\", \"files\": {{ \"vndis_log\": {{ \"content\": \"{}\"}} }} }}", &paste);
+
+                let mut res = client.request(hyper::method::Method::Patch, "https://api.github.com/gists/9f58fe727c0cea299c46")
+                                    .headers(headers)
+                                    .body(&body)
+                                    .send()
+                                    .unwrap();
 
                 let mut link = String::new();
                 res.read_to_string(&mut link).unwrap();
-                self.send_msg(VNDIS, &format!("{}: log dump: {} | number of entires={} | Filter={}", nickname, link, log_size, filter));
+                if let Some(pos) = link.find("raw_url") {
+                    let pos = pos + 10;
+                    let link = &link[pos..];
+                    let end = link.find("\"").unwrap();
+                    self.send_msg(VNDIS, &format!("{}: log dump: {} | number of entires={} | Filter={}", nickname, &link[..end], log_size, filter));
+                }
+                else {
+                    self.send_msg(VNDIS, &format!("{}: i failed to upload logs :( Check up reason with master.", nickname));
+                    println!(">>>ERROR: bad github gist result:{}", &link);
+                }
             });
         });
     }
@@ -400,7 +397,7 @@ impl KuuBot {
 
             },
             Some(&"dump") => {
-                let mut filter = log::FilterLog::None;
+                let filter: log::FilterLog;
                 match parts.next() {
                     Some(&"last") => {
                         if let Some(filter_str) = parts.next() {
@@ -432,8 +429,9 @@ impl KuuBot {
                             return BotResponse::Channel("you forgot to tell me filter value :(".to_string());
                         }
                     },
-                    _ => {
-                        return BotResponse::Channel(format!("there is such filter >{}<, dummy!", filter));
+                    None => filter = log::FilterLog::None,
+                    filter @ _ => {
+                        return BotResponse::Channel(format!("there is no such filter >{}<, dummy!", filter.unwrap()));
                     },
                 }
 

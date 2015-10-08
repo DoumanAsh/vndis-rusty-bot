@@ -107,7 +107,7 @@ impl IrcLog {
             let time_stamp = time::strptime(&line[DATA_START..DATA_END], "%x %X.%f").unwrap();
 
             if filter.check(&time_stamp) {
-                acc + &format!("{}\n", line)
+                acc + &format!("{}\\n", line)
             }
             else {
                 acc
@@ -133,7 +133,7 @@ impl IrcLog {
         else {
             self.iter()
                 .filter(|elem| filter.check(&elem.time()))
-                .fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\n", item))
+                .fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\\n", item))
         }
     }
 
