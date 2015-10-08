@@ -406,7 +406,7 @@ impl KuuBot {
                             let filter_type = filter_chars.next_back().unwrap();
                             let filter_val = filter_chars.collect::<String>().parse::<i64>();
 
-                            if filter_val.is_err() || filter_str.ends_with(TYPES) {
+                            if filter_val.is_err() || !TYPES.contains(&filter_type) {
                                 return BotResponse::Channel(format!(">{}< is not normal filter, dummy. It should be num<m/h/d>", filter_str));
                             }
 

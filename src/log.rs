@@ -22,7 +22,7 @@ impl FilterLog {
     pub fn check(&self, time: &time::Tm) -> bool {
         match *self {
             FilterLog::None => true,
-            FilterLog::Last(from) => from > *time,
+            FilterLog::Last(from) => from < *time,
         }
     }
 }
