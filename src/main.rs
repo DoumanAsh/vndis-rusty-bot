@@ -246,7 +246,7 @@ impl KuuBot {
                     return;
                 }
 
-                let log_size = paste.lines().count();
+                let log_size = paste.matches("\\n").count();
                 let mut headers = hyper::header::Headers::new();
                 headers.set(hyper::header::Authorization(hyper::header::Basic{username: "DoumanAsh".to_owned(), password: Some(GITHUB_AUTH.trim().to_owned())}));
                 headers.set(hyper::header::UserAgent("vndis_rusty_bot/1.0".to_owned()));
@@ -266,7 +266,7 @@ impl KuuBot {
                     let pos = pos + 10;
                     let link = &link[pos..];
                     let end = link.find("\"").unwrap();
-                    self.send_msg(VNDIS, &format!("{}: log dump: {} | number of entires={} | Filter={}", nickname, &link[..end], log_size, filter));
+                    self.send_msg(VNDIS, &format!("{}: log dump: {} | len={} | Filter={}", nickname, &link[..end], log_size, filter));
                 }
                 else {
                     self.send_msg(VNDIS, &format!("{}: i failed to upload logs :( Check up reason with master.", nickname));
