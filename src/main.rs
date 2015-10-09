@@ -11,7 +11,12 @@ use std::io::{Write, Read, BufWriter, BufReader};
 mod utils;
 mod log;
 
+#[cfg(test)]
+const GITHUB_AUTH: &'static str = "some_token";
+
+#[cfg(not(test))]
 const GITHUB_AUTH: &'static str = include_str!("github_token.txt");
+
 const VNDIS: &'static str  = "#vndis";
 const MASTER: &'static str = "Douman";
 const USAGE: &'static str  = "Available commands:\n
