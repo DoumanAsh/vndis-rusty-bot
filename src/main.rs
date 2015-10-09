@@ -70,8 +70,8 @@ impl KuuBot {
             "google"              => KuuBot::command_google(&parts),
             "log"                 => self.command_log(nickname, &parts[2..], log),
             "about" | "status"    => self.command_about(nickname, &log),
-            "help"                => self.command_help(),
-            "rape"                => self.command_rape(&parts[2..]),
+            "help"                => KuuBot::command_help(),
+            "rape"                => KuuBot::command_rape(&parts[2..]),
             "huiping" | "хуйпинг" => BotResponse::Channel("死になさいゴミムシ".to_string()),
             _                     => BotResponse::Channel("...".to_string()),
         }
@@ -299,7 +299,7 @@ impl KuuBot {
 
     #[inline(always)]
     ///Handler for command help.
-    fn command_help(&self) -> BotResponse {
+    fn command_help() -> BotResponse {
         BotResponse::Private(USAGE.to_string())
     }
 
@@ -340,13 +340,14 @@ impl KuuBot {
     }
 
     #[inline(always)]
-    fn command_rape(&self, parts: &[&str]) -> BotResponse {
+    fn command_rape(parts: &[&str]) -> BotResponse {
         match parts.iter().next() {
             Some(&MASTER) => BotResponse::Channel("umm... no... :(".to_string()),
             None | _      => BotResponse::Channel("へんたい！".to_string()),
         }
     }
 
+    ///Parses string "num<d/m/h" to time.
     fn parse_filter_time(filter_str: &str) -> Result<time::Tm, BotResponse> {
         const TYPES: &'static[char] = &['m', 'h', 'd'];
         let mut filter_chars = filter_str.chars();
@@ -357,6 +358,7 @@ impl KuuBot {
             return Err(BotResponse::Channel(format!(">{}< is not normal filter, dummy. It should be num<m/h/d>", filter_str)));
         }
 
+        //@TODO: handle 0 value as bad one?
         let filter_val = filter_val.unwrap();
         if filter_val < 0 {
             return Err(BotResponse::Channel("filter cannot be negative... dummy.".to_string()));
@@ -589,17 +591,71 @@ mod tests {
         assert!(response.unwrap() == -20);
     }
 
+    #[test]
     fn test_parse_filter_time() {
-
         assert!(super::KuuBot::parse_filter_time("20m").is_ok());
         assert!(super::KuuBot::parse_filter_time("20666m").is_ok());
         assert!(super::KuuBot::parse_filter_time("20d").is_ok());
         assert!(super::KuuBot::parse_filter_time("20h").is_ok());
+        assert!(super::KuuBot::parse_filter_time("0h").is_ok());
 
         assert!(super::KuuBot::parse_filter_time("-20h").is_err());
-        assert!(super::KuuBot::parse_filter_time("0h").is_err());
         assert!(super::KuuBot::parse_filter_time("0Gsdasdsa").is_err());
         assert!(super::KuuBot::parse_filter_time("G1").is_err());
         assert!(super::KuuBot::parse_filter_time("5").is_err());
+    }
+
+    #[test]
+    fn test_simple_responses() {
+        pre_condition();
+
+        let bot = super::KuuBot::new();
+        let mut log = super::log::IrcLog::new();
+
+        let default_nick = "Someone".to_string();
+
+        let usr_msg = "Kuu: ping".to_string();
+        let response = bot.direct_response(&default_nick, &usr_msg, &mut log);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "pong",
+            _ => false
+        });
+
+        let usr_msg = "Kuu: asdasdasfdsgfdsgdfgdfg".to_string();
+        let response = bot.direct_response(&default_nick, &usr_msg, &mut log);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "...",
+            _ => false
+        });
+
+        let usr_msg = "Kuu: huiping".to_string();
+        let response = bot.direct_response(&default_nick, &usr_msg, &mut log);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "死になさいゴミムシ",
+            _ => false
+        });
+
+        let usr_msg = "!ping".to_string();
+        let response = bot.indirect_response(&default_nick, &usr_msg, &mut log);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "pong",
+            _ => false
+        });
+
+        let usr_msg = "!huiping".to_string();
+        let response = bot.indirect_response(&default_nick, &usr_msg, &mut log);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "死になさいゴミムシ",
+            _ => false
+        });
+
+        let usr_msg = "Kuu: tadaima".to_string();
+        let response = bot.indirect_response(&default_nick, &usr_msg, &mut log);
+        assert!(match response {
+            super::BotResponse::Channel(text) => text == "okaeri",
+            _ => false
+        });
+
+        post_condition();
     }
 }

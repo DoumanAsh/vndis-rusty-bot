@@ -292,15 +292,15 @@ mod tests {
         assert!(log.read_to_string(&filter) == expect_str);
         assert!(log.fs_read(&filter).is_empty());
 
-        for i in 0..520 {
+        for i in 0..old_capacity+1 {
             let entry = IrcEntry::new(format!("Kuu{}", i), format!("i={}", i));
             expect_str = expect_str + &format!("{}\\n", &entry);
             log.add(entry);
         }
 
         assert!(log.capacity() == old_capacity);
-        assert!(log.back().unwrap().nickname == "Kuu519");
-        assert!(log.back().unwrap().message == "i=519");
+        assert!(log.back().unwrap().nickname == format!("Kuu{}", old_capacity));
+        assert!(log.back().unwrap().message == format!("i={}", old_capacity));
         assert!(log.get_all(&filter) == expect_str);
 
         drop(log);
