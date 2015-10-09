@@ -241,11 +241,10 @@ impl KuuBot {
         }
     }
 
-    ///Upload log dump to pastebin.
+    ///Upload log dump to gist.
     fn upload(&self, log: &mut log::IrcLog, nickname: &String, filter: &log::FilterLog) {
+        let paste = log.get_all(filter);
         crossbeam::scope(|scope| {
-            let paste = log.get_all(filter);
-
             scope.spawn(|| {
                 if paste.is_empty() {
                     self.send_msg(VNDIS, &format!("{}: I'm sorry there are no logs for your request :(", nickname));
