@@ -106,9 +106,9 @@ impl KuuBot {
     ///Sends bot's response
     fn send_response(&self, response: BotResponse, nickname: &String) {
         match response {
-            BotResponse::Channel(text) => { self.send_msg(VNDIS, &format!("{}: {}", nickname, &text)); },
+            BotResponse::Channel(text) => self.send_msg(VNDIS, &format!("{}: {}", nickname, &text)),
             //for private response we allow to send several.
-            BotResponse::Private(text) => { for line in text.lines() { self.send_msg(&nickname, line); } },
+            BotResponse::Private(text) => for line in text.lines() { self.send_msg(&nickname, line); },
             BotResponse::None => (),
         }
     }

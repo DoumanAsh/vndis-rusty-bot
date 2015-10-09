@@ -4,7 +4,7 @@ version = "1.0.0"
 authors = ["Douman <douman@gmx.se>"]
 
 [dependencies]
-irc = { git = "https://github.com/aatxe/irc", features = ["ssl", "ctcp"] }
+irc = { version = "*", features = ["ssl", "ctcp"] }
 time = "*"
 hyper = "*"
 url = "*"
