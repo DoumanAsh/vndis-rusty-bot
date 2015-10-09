@@ -13,7 +13,6 @@ mod log;
 
 #[cfg(test)]
 const GITHUB_AUTH: &'static str = "some_token";
-
 #[cfg(not(test))]
 const GITHUB_AUTH: &'static str = include_str!("github_token.txt");
 
