@@ -251,18 +251,26 @@ impl KuuBot {
                     return;
                 }
 
-                let log_size = paste.matches("\\n").count();
+                let log_size = paste.lines().count();
                 let mut headers = hyper::header::Headers::new();
                 headers.set(hyper::header::Authorization(hyper::header::Basic{username: "DoumanAsh".to_owned(),
                                                                               password: Some(GITHUB_AUTH.trim().to_owned()) }));
                 headers.set(hyper::header::UserAgent("vndis_rusty_bot/1.0".to_owned()));
                 let client = hyper::Client::new();
 
-                let body = format!("{{\"description\": \"#vndis logs\", \"files\": {{ \"vndis_log\": {{ \"content\": \"{}\"}} }} }}", &paste);
+                let paste = format!(r##"{{
+                                        "description": "#vndis_log",
+                                        "files": {{
+                                            "vndis_log": {{
+                                                "content": "{}"
+                                                }}
+                                            }}
+                                        }}
+                                    "##, utils::Escape(paste));
 
                 let mut res = client.request(hyper::method::Method::Patch, "https://api.github.com/gists/9f58fe727c0cea299c46")
                                     .headers(headers)
-                                    .body(&body)
+                                    .body(&paste)
                                     .send()
                                     .unwrap();
 

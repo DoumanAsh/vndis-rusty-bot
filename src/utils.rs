@@ -2,6 +2,30 @@ extern crate irc;
 extern crate libc;
 
 use self::libc::{c_void};
+use std::fmt;
+use std::fmt::Write;
+
+pub struct Escape(pub String);
+
+impl fmt::Display for Escape {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        for elem in self.0.chars() {
+            let norm = elem.to_string();
+            try!(f.write_str(match elem {
+                '"'     => "\\\"",
+                '\\'    => "\\\\",
+                '\x08'  => "\\b",
+                '\x0c'  => "\\f",
+                '\n'    => "\\n",
+                '\r'    => "\\r",
+                '\t'    => "\\t",
+                _       => &norm,
+            }));
+        }
+
+        Ok(())
+    }
+}
 
 #[inline(always)]
 pub fn get_nick(msg_prefix: &Option<String>) -> Option<String> {

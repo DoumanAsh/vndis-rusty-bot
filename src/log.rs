@@ -107,7 +107,7 @@ impl IrcLog {
             let time_stamp = time::strptime(&line[DATA_START..DATA_END], "%x %X.%f").unwrap();
 
             if filter.check(&time_stamp) {
-                acc + &format!("{}\\n", line)
+                acc + &format!("{}\n", line)
             }
             else {
                 acc
@@ -132,7 +132,7 @@ impl IrcLog {
         else {
             self.iter()
                 .filter(|elem| filter.check(&elem.time()))
-                .fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\\n", item))
+                .fold(String::with_capacity(log_size*50), |acc, item| acc + &format!("{}\n", item))
         }
     }
 
@@ -286,7 +286,7 @@ mod tests {
         log.add(flood_entry.clone());
         log.add(rare_entry.clone());
 
-        let mut expect_str = format!("{}\\n{}\\n", flood_entry, rare_entry);
+        let mut expect_str = format!("{}\n{}\n", flood_entry, rare_entry);
         assert!(log.len() == 2);
         assert!(log.back() == Some(&rare_entry));
         assert!(log.read_to_string(&filter) == expect_str);
@@ -294,7 +294,7 @@ mod tests {
 
         for i in 0..old_capacity+1 {
             let entry = IrcEntry::new(format!("Kuu{}", i), format!("i={}", i));
-            expect_str = expect_str + &format!("{}\\n", &entry);
+            expect_str = expect_str + &format!("{}\n", &entry);
             log.add(entry);
         }
 
