@@ -2,11 +2,6 @@ language: rust
 rust:
     - stable
     - beta
-    - nightly
-
-matrix:
-    allow_failure:
-        - rust: nightly
 
 env:
     - RUST_TEST_THREADS=1

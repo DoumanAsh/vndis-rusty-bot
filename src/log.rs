@@ -58,7 +58,7 @@ impl IrcLog {
     }
 
     ///Dumps all logs except for last 20
-    pub fn dump_to_fs(&mut self) {
+    fn buff_to_file(&mut self) {
         let len = self.inner.len();
 
         if len <= 20 {return;}
@@ -71,11 +71,25 @@ impl IrcLog {
         self.fs_buf.flush().unwrap()
     }
 
+    ///Dumps all logs except for last 20
+    fn dump_to_file(&mut self) {
+        let len = self.inner.len();
+
+        if len == 0 {return;}
+
+        self.fs_buf.seek(std::io::SeekFrom::End(0)).unwrap();
+        //range is exclusive at the end
+        for _ in 0..len {
+            self.fs_buf.write_fmt(format_args!("{}\n", self.inner.pop_front().unwrap())).unwrap();
+        }
+        self.fs_buf.flush().unwrap()
+    }
+
     #[inline(always)]
     /// Adds entry to log.
     pub fn add(&mut self, entry: IrcEntry) {
         if self.len() >= self.capacity() {
-            self.dump_to_fs();
+            self.buff_to_file();
         }
         self.inner.push_back(entry);
     }
@@ -170,6 +184,12 @@ impl fmt::Display for IrcLog {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let heap_size = self.heap_size() as f32;
         write!(f, "Log(len={}, size={:.3}kb)", self.len(), heap_size/1024.0)
+    }
+}
+
+impl Drop for IrcLog {
+    fn drop(&mut self) {
+        self.dump_to_file();
     }
 }
 

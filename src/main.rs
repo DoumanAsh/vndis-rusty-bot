@@ -30,7 +30,8 @@ help      - to get this message";
 enum BotResponse {
     None,
     Private(String),
-    Channel(String)
+    Channel(String),
+    DyingMsg
 }
 
 struct KuuBot {
@@ -77,6 +78,8 @@ impl KuuBot {
             "help"                => KuuBot::command_help(),
             "rape"                => KuuBot::command_rape(&parts[2..]),
             "huiping" | "хуйпинг" => BotResponse::Channel("死になさいゴミムシ".to_string()),
+            "sleep"    | "die" |
+            "shutdown" | "bye"    => KuuBot::command_die(nickname),
             _                     => BotResponse::Channel("...".to_string()),
         }
     }
@@ -110,6 +113,11 @@ impl KuuBot {
             //for private response we allow to send several.
             BotResponse::Private(text) => for line in text.lines() { self.send_msg(&nickname, line); },
             BotResponse::None => (),
+            BotResponse::DyingMsg => {
+                self.send_msg(VNDIS, &format!("{}: Good bye, master", nickname));
+                self.server.send_quit("").unwrap();
+                panic!("Shutting down by request of master");
+            }
         }
     }
 
@@ -136,7 +144,7 @@ impl KuuBot {
             println!("{}", log.back().unwrap())
         }
         else {
-            println!(">>>ERROR: bad message over vndis")
+            println!(">>>ERROR: bad message over #vndis")
         }
     }
 
@@ -312,6 +320,19 @@ impl KuuBot {
     ///Handler for command help.
     fn command_help() -> BotResponse {
         BotResponse::Private(USAGE.to_string())
+    }
+
+    #[inline(always)]
+    ///Handler for command exit.
+    ///
+    ///This command will panic bot later on for graceful shutdown.
+    fn command_die(nickname: &String) -> BotResponse {
+        if nickname.starts_with(MASTER) {
+            BotResponse::DyingMsg
+        }
+        else {
+            BotResponse::Channel("死になさいゴミムシ".to_string())
+        }
     }
 
     #[inline]
