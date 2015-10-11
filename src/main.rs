@@ -115,7 +115,7 @@ impl KuuBot {
             BotResponse::None => (),
             BotResponse::DyingMsg => {
                 self.send_msg(VNDIS, &format!("{}: Good bye, master", nickname));
-                self.server.send_quit("").unwrap();
+                self.server.send_quit("...").unwrap();
                 panic!("Shutting down by request of master");
             }
         }
@@ -229,17 +229,20 @@ impl KuuBot {
                             else {
                                 self.welcome(message);
                             },
-                            "KICK"   => if message.suffix.unwrap_or("".to_string()) == VNDIS {
+                            "KICK"   => {
                                 println!(">>>KICKED OUT OF {}", &*message.args[0]);
-                                self.joined = false;
                                 match &*message.args[0] {
-                                    VNDIS => self.server.send_join(VNDIS).unwrap(),
+                                    VNDIS => {
+                                        self.joined = false;
+                                        self.server.send_join(VNDIS).unwrap();
+                                    },
                                     _     => (),
                                 }
                             },
                             _        => (),
                         }
                     },
+
                     Err(err) => println!(">>>ERROR: {}", err),
                 }
             }
