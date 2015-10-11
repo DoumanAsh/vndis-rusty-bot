@@ -5,3 +5,5 @@ rust:
 
 env:
     - RUST_TEST_THREADS=1
+
+script: cargo test --verbose
