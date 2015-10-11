@@ -78,8 +78,9 @@ impl KuuBot {
             "help"                => KuuBot::command_help(),
             "rape"                => KuuBot::command_rape(&parts[2..]),
             "huiping" | "хуйпинг" => BotResponse::Channel("死になさいゴミムシ".to_string()),
-            "sleep"    | "die" |
-            "shutdown" | "bye"    => KuuBot::command_die(nickname),
+            "die"                 => KuuBot::command_die(nickname),
+            "sleep" |
+            "shutdown" | "bye"    => KuuBot::command_sleep(nickname),
             _                     => BotResponse::Channel("...".to_string()),
         }
     }
@@ -306,7 +307,7 @@ impl KuuBot {
     fn log_parse_num(num_str: &str) -> Result<isize, BotResponse> {
         let parse_res = num_str.parse::<isize>();
         if parse_res.is_err(){
-            return Err(BotResponse::Channel(format!(">{}< is not normal integer... bully", num_str)));
+            return Err(BotResponse::Channel(format!(">{}< is not normal integer...", num_str)));
         }
 
         let num: isize = parse_res.unwrap();
@@ -323,6 +324,19 @@ impl KuuBot {
     ///Handler for command help.
     fn command_help() -> BotResponse {
         BotResponse::Private(USAGE.to_string())
+    }
+
+    #[inline(always)]
+    ///Gentle handler for command exit.
+    ///
+    ///This command will panic bot later on for graceful shutdown.
+    fn command_sleep(nickname: &String) -> BotResponse {
+        if nickname.starts_with(MASTER) {
+            BotResponse::DyingMsg
+        }
+        else {
+            BotResponse::Channel("It is for my master only".to_string())
+        }
     }
 
     #[inline(always)]
@@ -347,7 +361,7 @@ impl KuuBot {
             BotResponse::Private(format!("{} {}", &self, log))
         }
         else {
-            BotResponse::Channel("This is only for my master!".to_string())
+            BotResponse::Channel("It is for my master only".to_string())
         }
     }
 
@@ -355,7 +369,7 @@ impl KuuBot {
     ///Handler for command google.
     fn command_google(parts: &[&str]) -> BotResponse {
         if parts.len() < 3 {
-            return BotResponse::Channel("... bully...".to_string());
+            return BotResponse::Channel("google nothing...?".to_string());
         }
 
         BotResponse::Channel(format!("http://lmgtfy.com/?q={}", parts[2..].join("+")))
@@ -365,20 +379,20 @@ impl KuuBot {
     ///Handler for command grep/find.
     fn command_grep(parts: &[&str]) -> BotResponse {
         if parts.len() < 4 {
-            return BotResponse::Channel("... bully...".to_string());
+            return BotResponse::Channel("what? Nothing...?".to_string());
         }
 
         match parts[2] {
-            "vn" => BotResponse::Channel(format!("vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", parts[3..].join("+"))),
-            _ => BotResponse::Channel("... bully...".to_string()),
+            "vn"    => BotResponse::Channel(format!("vndb: https://vndb.org/v/all?q={};fil=tagspoil-0;o=d;s=rel", parts[3..].join("+"))),
+            bad @ _ => BotResponse::Channel(format!("i do not know what is >{}<", bad)),
         }
     }
 
     #[inline(always)]
     fn command_rape(parts: &[&str]) -> BotResponse {
         match parts.iter().next() {
-            Some(&MASTER) => BotResponse::Channel("umm... no... :(".to_string()),
-            None | _      => BotResponse::Channel("へんたい！".to_string()),
+            Some(&MASTER) => BotResponse::Channel("umm... no...".to_string()),
+            None | _      => BotResponse::Channel("へんたい。。。".to_string()),
         }
     }
 
@@ -390,13 +404,13 @@ impl KuuBot {
         let filter_val = filter_chars.collect::<String>().parse::<i64>();
 
         if filter_val.is_err() || !TYPES.contains(&filter_type) {
-            return Err(BotResponse::Channel(format!(">{}< is not normal filter, dummy. It should be num<m/h/d>", filter_str)));
+            return Err(BotResponse::Channel(format!(">{}< is not normal filter. It should be num<m/h/d>", filter_str)));
         }
 
         //@TODO: handle 0 value as bad one?
         let filter_val = filter_val.unwrap();
         if filter_val < 0 {
-            return Err(BotResponse::Channel("filter cannot be negative... dummy.".to_string()));
+            return Err(BotResponse::Channel("filter cannot be negative...".to_string()));
         }
 
         let time_before = time::now() - match filter_type {
@@ -473,12 +487,12 @@ impl KuuBot {
                             }
                         }
                         else {
-                            return BotResponse::Channel("you forgot to tell me filter value :(".to_string());
+                            return BotResponse::Channel("you forgot to tell me filter value".to_string());
                         }
                     },
                     None => filter = log::FilterLog::None,
                     filter @ _ => {
-                        return BotResponse::Channel(format!("there is no such filter >{}<, dummy!", filter.unwrap()));
+                        return BotResponse::Channel(format!("there is no such filter >{}<", filter.unwrap()));
                     },
                 }
 
@@ -488,7 +502,7 @@ impl KuuBot {
             Some(&"len") => BotResponse::Private(format!("Log size is {}", log.len())),
             Some(&"help") => BotResponse::Private("log <first/last> [num] | <len> | <dump> [last num<m/h/d>]".to_string()),
             None => BotResponse::Channel("Um... what do you want? Do you need help?".to_string()),
-            _ => BotResponse::Channel("I don't know such command...".to_string()),
+            _ => BotResponse::Channel("I don't know such log command...".to_string()),
         }
     }
 }
@@ -536,7 +550,7 @@ mod tests {
 
         let response = bot.command_about(&"!DoumanAsh".to_string(), &log);
         assert!(match response {
-            super::BotResponse::Channel(text) => text == "This is only for my master!",
+            super::BotResponse::Channel(text) => text == "It is for my master only",
             _ => false
         });
 
@@ -548,7 +562,7 @@ mod tests {
         let parts = vec!["Kuu:", "google"];
         let response = super::KuuBot::command_google(&parts);
         assert!(match response {
-            super::BotResponse::Channel(text) => text == "... bully...",
+            super::BotResponse::Channel(text) => text == "google nothing...?",
             _ => false
         });
 
@@ -565,7 +579,7 @@ mod tests {
         let parts = vec!["Kuu:", "grep"];
         let response = super::KuuBot::command_grep(&parts);
         assert!(match response {
-            super::BotResponse::Channel(text) => text == "... bully...",
+            super::BotResponse::Channel(text) => text == "what? Nothing...?",
             _ => false
         });
 
@@ -584,7 +598,7 @@ mod tests {
         assert!(response.is_err());
         let response = response.err().unwrap();
         assert!(match response {
-            super::BotResponse::Channel(text) => text == format!(">{}< is not normal integer... bully", test_str),
+            super::BotResponse::Channel(text) => text == format!(">{}< is not normal integer...", test_str),
             _ => false
         });
 
