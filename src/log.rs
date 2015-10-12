@@ -11,6 +11,8 @@ use std;
 
 use utils;
 
+const TIME_FORMAT: &'static str = "%x %X";
+
 pub enum FilterLog {
     None,
     Last(time::Tm)
@@ -31,7 +33,7 @@ impl fmt::Display for FilterLog {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             FilterLog::None => write!(f, "None"),
-            FilterLog::Last(from) => write!(f, "Last({})", from.strftime("%x %X.%f").unwrap()),
+            FilterLog::Last(from) => write!(f, "Last({})", from.strftime(TIME_FORMAT).unwrap()),
         }
     }
 }
@@ -118,7 +120,7 @@ impl IrcLog {
             const DATA_START: usize = 1;
             const DATA_END: usize = 28;
             let line = line.unwrap();
-            let time_stamp = time::strptime(&line[DATA_START..DATA_END], "%x %X.%f").unwrap();
+            let time_stamp = time::strptime(&line[DATA_START..DATA_END], TIME_FORMAT).unwrap();
 
             if filter.check(&time_stamp) {
                 acc + &format!("{}\n", line)
@@ -248,7 +250,7 @@ impl PartialEq for IrcEntry {
 
 impl fmt::Display for IrcEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "[{}] <{}> {}", self.time.strftime("%x %X.%f").unwrap(), self.nickname, self.message)
+        write!(f, "[{}] <{}> {}", self.time.strftime(TIME_FORMAT).unwrap(), self.nickname, self.message)
     }
 }
 
@@ -279,7 +281,7 @@ mod tests {
 
         assert!(!filter_now.check(&time_before));
         assert!(filter_now.check(&time_after));
-        assert!(format!("{}", filter_now) == format!("Last({})", time_now.strftime("%x %X.%f").unwrap()));
+        assert!(format!("{}", filter_now) == format!("Last({})", time_now.strftime(super::TIME_FORMAT).unwrap()));
     }
 
     macro_rules! is_file {
