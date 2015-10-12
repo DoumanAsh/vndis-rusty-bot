@@ -5,6 +5,7 @@ use self::libc::{c_void};
 use std::fmt;
 use std::fmt::Write;
 
+///Struct to escape control characters for json.
 pub struct Escape(pub String);
 
 impl fmt::Display for Escape {
@@ -71,6 +72,7 @@ macro_rules! impl_is_text_checker {
 
 #[cfg(test)]
 mod tests {
+
     #[test]
     fn test_get_nick() {
         let result = super::get_nick(&Some("KuuRusty!KuuRusty@irc.net".to_string()));
@@ -80,5 +82,12 @@ mod tests {
 
         let result = super::get_nick(&None);
         assert!(!result.is_some());
+    }
+
+    #[test]
+    fn test_escape() {
+        let test_str = "Line1\r\n\"Name:\"\t\"Grog\"\n".to_string();
+
+        assert!(format!("{}", super::Escape(test_str)) == "Line1\\r\\n\\\"Name:\\\"\\t\\\"Grog\\\"\\n");
     }
 }
