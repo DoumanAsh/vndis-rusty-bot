@@ -424,86 +424,67 @@ impl KuuBot {
         Ok(time_before.to_local())
     }
 
+
     ///Handler for command log.
     fn command_log(&self, nickname: &String, parts: &[&str], log: &mut log::IrcLog) -> BotResponse {
         let mut parts = parts.iter();
         match parts.next() {
-            Some(&"last") => {
-                let num: isize;
-                if let Some(val) = parts.next() {
-                    match KuuBot::log_parse_num(val) {
-                        Ok(parse_result) => { num = parse_result },
-                        Err(parse_err) => return parse_err,
-                    }
-                }
-                else {
-                    num = 20;
-                }
-
-                if num > 0 {
-                    let num = num as usize;
-                    let first = format!("Last {} messages\n", num);
-                    BotResponse::Private(log.iter().rev().take(num).collect::<Vec<_>>().into_iter().rev().fold(first, |acc, item| acc + &format!("{}\n", item)))
-                }
-                else {
-                    let num = num.abs() as usize;
-                    let first = format!("First {} messages\n", num);
-                    BotResponse::Private(log.iter().take(num).fold(first, |acc, item| acc + &format!("{}\n", item)))
-                }
-
-            },
-            Some(&"first") => {
-                let num: isize;
-                if let Some(val) = parts.next() {
-                    match KuuBot::log_parse_num(val) {
-                        Ok(parse_result) => { num = parse_result },
-                        Err(parse_err) => return parse_err,
-                    }
-                }
-                else {
-                    num = 20;
-                }
-
-                if num < 0 {
-                    let num = num.abs() as usize;
-                    let first = format!("Last {} messages\n", num);
-                    BotResponse::Private(log.iter().rev().take(num).collect::<Vec<_>>().into_iter().rev().fold(first, |acc, item| acc + &format!("{}\n", item)))
-                }
-                else {
-                    let num = num as usize;
-                    let first = format!("First {} messages\n", num);
-                    BotResponse::Private(log.iter().take(num).fold(first, |acc, item| acc + &format!("{}\n", item)))
-                }
-
-            },
-            Some(&"dump") => {
-                let filter: log::FilterLog;
-                match parts.next() {
-                    Some(&"last") => {
-                        if let Some(filter_str) = parts.next() {
-                            match KuuBot::parse_filter_time(filter_str) {
-                                Ok(time)      => filter = log::FilterLog::Last(time),
-                                Err(response) => return response,
-                            }
-                        }
-                        else {
-                            return BotResponse::Channel("you forgot to tell me filter value".to_string());
-                        }
-                    },
-                    None => filter = log::FilterLog::None,
-                    filter @ _ => {
-                        return BotResponse::Channel(format!("there is no such filter >{}<", filter.unwrap()));
-                    },
-                }
-
-                self.upload(log, nickname, &filter);
-                BotResponse::None
-            },
+            Some(&"last") => KuuBot::command_log_last(log, &mut parts),
+            Some(&"dump") => self.command_log_dump(nickname, log, &mut parts),
             Some(&"len") => BotResponse::Private(format!("Log size is {}", log.len())),
-            Some(&"help") => BotResponse::Private("log <first/last> [num] | <len> | <dump> [last num<m/h/d>]".to_string()),
+            Some(&"help") => BotResponse::Private("log <last> [num] | <len> | <dump> [last num<m/h/d>]".to_string()),
             None => BotResponse::Channel("Um... what do you want? Do you need help?".to_string()),
             _ => BotResponse::Channel("I don't know such log command...".to_string()),
         }
+    }
+
+    ///Handler for log sub-command last.
+    fn command_log_last(log: &mut log::IrcLog, parts: &mut std::slice::Iter<&str>) -> BotResponse {
+        let num: isize = if let Some(val) = parts.next() {
+            match KuuBot::log_parse_num(val) {
+                Ok(parse_result) => parse_result,
+                Err(parse_err) => return parse_err,
+            }
+        }
+        else {
+            20
+        };
+
+        if num > 0 {
+            let num = num as usize;
+            let first = format!("Last {} messages\n", num);
+            BotResponse::Private(log.iter().rev().take(num).collect::<Vec<_>>().into_iter().rev().fold(first, |acc, item| acc + &format!("{}\n", item)))
+        }
+        else {
+            let num = num.abs() as usize;
+            let first = format!("First {} messages\n", num);
+            BotResponse::Private(log.iter().take(num).fold(first, |acc, item| acc + &format!("{}\n", item)))
+        }
+    }
+
+    ///Handler for log sub-command dump.
+    fn command_log_dump(&self, nickname: &String, log: &mut log::IrcLog, parts: &mut std::slice::Iter<&str>) -> BotResponse {
+        let filter: log::FilterLog;
+        match parts.next() {
+            Some(&"last") => {
+                if let Some(filter_str) = parts.next() {
+                    match KuuBot::parse_filter_time(filter_str) {
+                        Ok(time)      => filter = log::FilterLog::Last(time),
+                        Err(response) => return response,
+                    }
+                }
+                else {
+                    return BotResponse::Channel("you forgot to tell me filter value".to_string());
+                }
+            },
+            None => filter = log::FilterLog::None,
+            filter @ _ => {
+                return BotResponse::Channel(format!("there is no such filter >{}<", filter.unwrap()));
+            },
+        }
+
+        self.upload(log, nickname, &filter);
+        BotResponse::None
     }
 }
 
@@ -652,6 +633,48 @@ mod tests {
         assert!(super::KuuBot::parse_filter_time("0Gsdasdsa").is_err());
         assert!(super::KuuBot::parse_filter_time("G1").is_err());
         assert!(super::KuuBot::parse_filter_time("5").is_err());
+    }
+
+    #[test]
+    fn test_log_last() {
+        pre_condition();
+
+        let mut log = super::log::IrcLog::new();
+
+        for i in 0..26 {
+            let entry = super::log::IrcEntry::new(format!("Kuu{}", i), format!("i={}", i));
+            log.add(entry);
+        }
+
+        let query = ["2"];
+        let mut query_iter = query.iter();
+        if let super::BotResponse::Private(log_lines) = super::KuuBot::command_log_last(&mut log, &mut query_iter) {
+            let lines_array: Vec<&str> = log_lines.lines().collect();
+            assert!(lines_array.len() == 3);
+            assert!(lines_array[0] == "Last 2 messages");
+            assert!(lines_array[1].ends_with("i=24"));
+            assert!(lines_array[2].ends_with("i=25"));
+        }
+        else {
+            assert!(true);
+        }
+
+        let query = ["-2"];
+        let mut query_iter = query.iter();
+        if let super::BotResponse::Private(log_lines) = super::KuuBot::command_log_last(&mut log, &mut query_iter) {
+            let lines_array: Vec<&str> = log_lines.lines().collect();
+            assert!(lines_array.len() == 3);
+            assert!(lines_array[0] == "First 2 messages");
+            assert!(lines_array[1].ends_with("i=0"));
+            assert!(lines_array[2].ends_with("i=1"));
+        }
+        else {
+            assert!(true);
+        }
+
+        drop(log);
+
+        post_condition();
     }
 
     #[test]
