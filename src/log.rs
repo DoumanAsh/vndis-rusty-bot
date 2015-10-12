@@ -231,8 +231,8 @@ impl IrcEntry {
     pub fn heap_size(&self) -> usize {
         //there are 11 fields of i32 in Tm.
         std::mem::size_of::<i32>() * 11 +
-        utils::heap_size_of(self.nickname.as_ptr() as *const c_void) +
-        utils::heap_size_of(self.message.as_ptr() as *const c_void)
+        utils::heap_size_of(self.nickname().as_ptr() as *const c_void) +
+        utils::heap_size_of(self.message().as_ptr() as *const c_void)
     }
 }
 
