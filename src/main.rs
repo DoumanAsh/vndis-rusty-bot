@@ -30,6 +30,7 @@ help      - to get this message";
 enum BotResponse {
     None,
     Private(String),
+    PrivateMulti(String),
     Channel(String),
     DyingMsg
 }
@@ -112,7 +113,8 @@ impl KuuBot {
         match response {
             BotResponse::Channel(text) => self.send_msg(VNDIS, &format!("{}: {}", nickname, &text)),
             //for private response we allow to send several.
-            BotResponse::Private(text) => for line in text.lines() { self.send_msg(&nickname, line); },
+            BotResponse::Private(text) => self.send_msg(&nickname, &text),
+            BotResponse::PrivateMulti(text) => for line in text.lines() { self.send_msg(&nickname, line); },
             BotResponse::None => (),
             BotResponse::DyingMsg => {
                 self.send_msg(VNDIS, &format!("{}: Good bye, master", nickname));
@@ -135,7 +137,7 @@ impl KuuBot {
 
     #[inline]
     ///Handler to all VNDIS messages.
-    fn vndis_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
+    fn vndis_msg(&self, message: Message, log: &mut log::IrcLog) {
         if let (Some(nickname), Some(usr_msg)) = (utils::get_nick(&message.prefix), message.suffix) {
             let response = self.get_response(&nickname, &usr_msg, log);
 
@@ -151,7 +153,7 @@ impl KuuBot {
 
     #[inline]
     ///Handler to private queries.
-    fn private_query(&self, message: irc::client::data::message::Message, log: &log::IrcLog) {
+    fn private_query(&self, message: Message, log: &log::IrcLog) {
         if let Some(nickname) = utils::get_nick(&message.prefix) {
             if nickname.starts_with(MASTER) {
                 let usr_msg = message.suffix.unwrap().to_lowercase();
@@ -177,7 +179,7 @@ impl KuuBot {
 
     #[inline]
     ///Message dispatcher.
-    fn handle_msg(&self, message: irc::client::data::message::Message, log: &mut log::IrcLog) {
+    fn handle_msg(&self, message: Message, log: &mut log::IrcLog) {
         if !self.joined { return; }
 
         match &*message.args[0] {
@@ -199,7 +201,7 @@ impl KuuBot {
 
     #[inline(always)]
     ///Welcome joined persons.
-    fn welcome(&self, message: irc::client::data::message::Message) {
+    fn welcome(&self, message: Message) {
         if let (Some(nickname), Some(usr_msg)) = (utils::get_nick(&message.prefix), message.suffix) {
             let response = match &usr_msg[..] {
                 VNDIS => self.welcome_vndis(&nickname),
@@ -295,7 +297,7 @@ impl KuuBot {
                     self.send_msg(VNDIS, &format!("{}: log dump: {} | len={} | Filter={}", nickname, &link[..end], log_size, filter));
                 }
                 else {
-                    self.send_msg(VNDIS, &format!("{}: i failed to upload logs :( Check up reason with master.", nickname));
+                    self.send_msg(VNDIS, &format!("{}: i failed to upload logs :( Check up reason in my console.", nickname));
                     println!(">>>ERROR: bad github gist result:{}", &link);
                 }
             });
@@ -323,7 +325,7 @@ impl KuuBot {
     #[inline(always)]
     ///Handler for command help.
     fn command_help() -> BotResponse {
-        BotResponse::Private(USAGE.to_string())
+        BotResponse::PrivateMulti(USAGE.to_string())
     }
 
     #[inline(always)]
@@ -431,7 +433,7 @@ impl KuuBot {
         match parts.next() {
             Some(&"last") => KuuBot::command_log_last(log, &mut parts),
             Some(&"dump") => self.command_log_dump(nickname, log, &mut parts),
-            Some(&"len") => BotResponse::Private(format!("Log size is {}", log.len())),
+            Some(&"len")  => BotResponse::Private(format!("Log size is {}", log.len())),
             Some(&"help") => BotResponse::Private("log <last> [num] | <len> | <dump> [last num<m/h/d>]".to_string()),
             None => BotResponse::Channel("Um... what do you want? Do you need help?".to_string()),
             _ => BotResponse::Channel("I don't know such log command...".to_string()),
@@ -453,12 +455,12 @@ impl KuuBot {
         if num > 0 {
             let num = num as usize;
             let first = format!("Last {} messages\n", num);
-            BotResponse::Private(log.iter().rev().take(num).collect::<Vec<_>>().into_iter().rev().fold(first, |acc, item| acc + &format!("{}\n", item)))
+            BotResponse::PrivateMulti(log.iter().rev().take(num).collect::<Vec<_>>().into_iter().rev().fold(first, |acc, item| acc + &format!("{}\n", item)))
         }
         else {
             let num = num.abs() as usize;
             let first = format!("First {} messages\n", num);
-            BotResponse::Private(log.iter().take(num).fold(first, |acc, item| acc + &format!("{}\n", item)))
+            BotResponse::PrivateMulti(log.iter().take(num).fold(first, |acc, item| acc + &format!("{}\n", item)))
         }
     }
 
@@ -648,7 +650,7 @@ mod tests {
 
         let query = ["2"];
         let mut query_iter = query.iter();
-        if let super::BotResponse::Private(log_lines) = super::KuuBot::command_log_last(&mut log, &mut query_iter) {
+        if let super::BotResponse::PrivateMulti(log_lines) = super::KuuBot::command_log_last(&mut log, &mut query_iter) {
             let lines_array: Vec<&str> = log_lines.lines().collect();
             assert!(lines_array.len() == 3);
             assert!(lines_array[0] == "Last 2 messages");
@@ -661,7 +663,7 @@ mod tests {
 
         let query = ["-2"];
         let mut query_iter = query.iter();
-        if let super::BotResponse::Private(log_lines) = super::KuuBot::command_log_last(&mut log, &mut query_iter) {
+        if let super::BotResponse::PrivateMulti(log_lines) = super::KuuBot::command_log_last(&mut log, &mut query_iter) {
             let lines_array: Vec<&str> = log_lines.lines().collect();
             assert!(lines_array.len() == 3);
             assert!(lines_array[0] == "First 2 messages");
