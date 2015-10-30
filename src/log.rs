@@ -24,7 +24,9 @@ impl FilterLog {
     pub fn check(&self, time: &time::Tm) -> bool {
         match *self {
             FilterLog::None => true,
-            FilterLog::Last(from) => from < *time,
+            FilterLog::Last(from) => {
+                from < *time
+            },
         }
     }
 }
@@ -118,7 +120,7 @@ impl IrcLog {
 
         lines.fold(acc_str, |acc, line| {
             const DATA_START: usize = 1;
-            const DATA_END: usize = 28;
+            const DATA_END: usize = 18;
             let line = line.unwrap();
             let time_stamp = time::strptime(&line[DATA_START..DATA_END], TIME_FORMAT).unwrap();
 
