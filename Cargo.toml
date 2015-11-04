@@ -8,7 +8,6 @@ irc = { version = "*", features = ["ssl", "ctcp"] }
 time = "*"
 hyper = "*"
 url = "*"
-crossbeam = "*"
 openssl = "*"
 libc = "*"
 

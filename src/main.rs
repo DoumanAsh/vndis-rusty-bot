@@ -2,7 +2,6 @@
 extern crate irc;
 extern crate hyper;
 extern crate url;
-extern crate crossbeam;
 extern crate time;
 
 use irc::client::prelude::*;
@@ -258,50 +257,46 @@ impl KuuBot {
     ///Upload log dump to gist.
     fn upload(&self, log: &mut log::IrcLog, nickname: &String, filter: &log::FilterLog) {
         let paste = log.get_all(filter);
-        crossbeam::scope(|scope| {
-            scope.spawn(|| {
-                if paste.is_empty() {
-                    self.send_msg(VNDIS, &format!("{}: I'm sorry there are no logs for your request :(", nickname));
-                    return;
-                }
+        if paste.is_empty() {
+            self.send_msg(VNDIS, &format!("{}: I'm sorry there are no logs for your request :(", nickname));
+            return;
+        }
 
-                let log_size = paste.lines().count();
-                let mut headers = hyper::header::Headers::new();
-                headers.set(hyper::header::Authorization(hyper::header::Basic{username: "DoumanAsh".to_owned(),
-                                                                              password: Some(GITHUB_AUTH.trim().to_owned()) }));
-                headers.set(hyper::header::UserAgent("vndis_rusty_bot/1.0".to_owned()));
-                let client = hyper::Client::new();
+        let log_size = paste.lines().count();
+        let mut headers = hyper::header::Headers::new();
+        headers.set(hyper::header::Authorization(hyper::header::Basic{username: "DoumanAsh".to_owned(),
+                                                                      password: Some(GITHUB_AUTH.trim().to_owned()) }));
+        headers.set(hyper::header::UserAgent("vndis_rusty_bot/1.0".to_owned()));
+        let client = hyper::Client::new();
 
-                let paste = format!(r##"{{
-                                        "description": "#vndis_log",
-                                        "files": {{
-                                            "vndis_log": {{
-                                                "content": "{}"
-                                                }}
-                                            }}
+        let paste = format!(r##"{{
+                                "description": "#vndis_log",
+                                "files": {{
+                                    "vndis_log": {{
+                                        "content": "{}"
                                         }}
-                                    "##, utils::Escape(paste));
+                                    }}
+                                }}
+                            "##, utils::Escape(paste));
 
-                let mut res = client.request(hyper::method::Method::Patch, "https://api.github.com/gists/9f58fe727c0cea299c46")
-                                    .headers(headers)
-                                    .body(&paste)
-                                    .send()
-                                    .unwrap();
+        let mut res = client.request(hyper::method::Method::Patch, "https://api.github.com/gists/9f58fe727c0cea299c46")
+                            .headers(headers)
+                            .body(&paste)
+                            .send()
+                            .unwrap();
 
-                let mut link = String::new();
-                res.read_to_string(&mut link).unwrap();
-                if let Some(pos) = link.find("raw_url") {
-                    let pos = pos + 10;
-                    let link = &link[pos..];
-                    let end = link.find("\"").unwrap();
-                    self.send_msg(VNDIS, &format!("{}: log dump: {} | len={} | Filter={}", nickname, &link[..end], log_size, filter));
-                }
-                else {
-                    self.send_msg(VNDIS, &format!("{}: i failed to upload logs :( Check up reason in my console.", nickname));
-                    println!(">>>ERROR: bad github gist result:{}", &link);
-                }
-            });
-        });
+        let mut link = String::new();
+        res.read_to_string(&mut link).unwrap();
+        if let Some(pos) = link.find("raw_url") {
+            let pos = pos + 10;
+            let link = &link[pos..];
+            let end = link.find("\"").unwrap();
+            self.send_msg(VNDIS, &format!("{}: log dump: {} | len={} | Filter={}", nickname, &link[..end], log_size, filter));
+        }
+        else {
+            self.send_msg(VNDIS, &format!("{}: i failed to upload logs :( Check up reason in my console.", nickname));
+            println!(">>>ERROR: bad github gist result:{}", &link);
+        }
     }
 
     #[inline]
