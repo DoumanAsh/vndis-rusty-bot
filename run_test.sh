@@ -1,2 +1,2 @@
-export RUST_TEST_THREADS=1
-cargo test
+#!/bin/sh
+env RUST_TEST_THREADS=1 cargo test

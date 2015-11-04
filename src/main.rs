@@ -3,6 +3,7 @@ extern crate irc;
 extern crate hyper;
 extern crate url;
 extern crate time;
+extern crate regex;
 
 use irc::client::prelude::*;
 use irc::client::conn::NetStream;
@@ -142,7 +143,8 @@ impl KuuBot {
 
             self.send_response(response, &nickname);
 
-            log.add(log::IrcEntry::new(nickname, usr_msg));
+            let strip_mirc = regex::Regex::new(r"\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?").unwrap();
+            log.add(log::IrcEntry::new(nickname, strip_mirc.replace_all(&usr_msg, "")));
             println!("{}", log.back().unwrap())
         }
         else {

@@ -10,6 +10,7 @@ hyper = "*"
 url = "*"
 openssl = "*"
 libc = "*"
+regex = "*"
 
 [profile.release]
 opt-level = 3
