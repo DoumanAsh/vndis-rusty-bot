@@ -29,13 +29,13 @@ impl FilterLog {
                 //       But for now live with it.
                 //       The issue: you get bad Tm from file with strptime()
                 //       NOTE: That strptime() sets year as 15, while Tm would have 115.
-                let from_seconds: i64 = if from.tm_year > 100 { from.tm_year * 3153600 } else { from.tm_year * 31536000 } as i64 +
+                let from_seconds: i64 = if from.tm_year > 100 { from.tm_year - 100 } else { from.tm_year } as i64 * 31536000 +
                                         (from.tm_mon * 2592000) as i64 +
                                         (from.tm_mday * 86400) as i64 +
                                         (from.tm_hour * 3600) as i64 +
                                         (from.tm_min * 60) as i64 +
                                         from.tm_sec as i64;
-                let time_seconds: i64 = if time.tm_year > 100 { time.tm_year * 3153600 } else { time.tm_year * 31536000 } as i64 +
+                let time_seconds: i64 = if time.tm_year > 100 { time.tm_year - 100 } else { time.tm_year } as i64 * 31536000 +
                                         (time.tm_mon * 2592000) as i64 +
                                         (time.tm_mday * 86400) as i64 +
                                         (time.tm_hour * 3600) as i64 +
